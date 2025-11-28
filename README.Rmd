@@ -1,30 +1,201 @@
 ---
-title: "README"
-author: "Nathan Krieger"
-date: "2025-11-19"
+title: "Analysis on NFL Play-By-Play Data"
+author: "Nathan Krieger, Caleb Moe"
 output: github_document
 ---
 
 ```{r setup, include=FALSE}
+
+library(tidyverse)
+
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+``` {r}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+**Introduction**
 
-You can also embed plots, for example:
+The NFL has become increasingly data-driven, and play-by-play (PBP) information provides one of the richest views into how teams behave on the field. In recent years, analysts have used PBP data to uncover trends such as fourth-down aggression, pass-rate over expectation, route combinations, motion usage, and situational efficiency.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Our project explores play-by-play trends across the NFL, focusing on how offensive decision-making and performance vary by:
+
+Down & distance
+
+Field position
+
+Play type (run/pass)
+
+Quarter & game situation
+
+Score differential
+
+Team tendencies
+
+The goal is to identify meaningful behavioral patterns and performance outcomes that can help explain how modern offenses operate.
+
+We also evaluate the robustness of our findings with multiple approaches and highlight unintuitive results requiring further investigation.
+
+
+**Data**
+
+Our analysis uses play-by-play data from NFLsavant.com, a publicly accessible resource containing detailed information for every offensive snap. The dataset includes 45 variables such as:
+
+GameId
+
+Quarter
+
+Minute
+
+YardLine
+
+Formation
+
+And many more...
+
+``` {r}
+
+head(pbp)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+``` {r}
+
+# Pass Rate By Down
+
+pbp %>%
+  filter(Down %in% 1:4) %>%
+  group_by(Down) %>%
+  summarize(pass_rate = mean(IsPass == 1, na.rm = TRUE)) %>%
+  ggplot(aes(x = factor(Down), y = pass_rate)) +
+  geom_col() +
+  labs(
+    title = "Pass Rate by Down",
+    x = "Down",
+    y = "Pass Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+
+
+```
+
+``` {r}
+
+# Pass vs Run by Field Position
+
+pbp %>%
+  filter(YardLine >= 1, YardLine <= 99) %>%
+  group_by(YardLine) %>%
+  summarize(pass_rate = mean(IsPass == 1, na.rm = TRUE)) %>%
+  ggplot(aes(YardLine, pass_rate)) +
+  geom_line(size = 1.1) +
+  labs(
+    title = "Pass Rate by Yard Line",
+    x = "Field Position (1 = Own Endzone, 99 = Opponent Goal)",
+    y = "Pass Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+
+
+```
+
+``` {r}
+
+# Yards Gained by Down
+
+pbp %>%
+  filter(Down %in% 1:4, Yards > -20 & Yards < 100) %>%  # removes oddities
+  group_by(Down) %>%
+  summarize(avg_yards = mean(Yards, na.rm = TRUE)) %>%
+  ggplot(aes(factor(Down), avg_yards)) +
+  geom_col() +
+  labs(
+    title = "Average Yards Gained by Down",
+    x = "Down",
+    y = "Average Yards Gained"
+  ) +
+  theme_minimal()
+
+```
+
+``` {r}
+
+# Play Type Frequency (Run, Pass, Sack)
+
+pbp %>%
+  mutate(
+    play_group = case_when(
+      IsPass == 1 ~ "Pass",
+      IsRush == 1 ~ "Rush",
+      IsSack == 1 ~ "Sack",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  count(play_group) %>%
+  ggplot(aes(x = reorder(play_group, n), y = n)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(
+      title = "Distribution of Play Types",
+      x = "Play Type",
+      y = "Count"
+    ) +
+    theme_minimal()
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
+``` {r}
+
+
+
+```
+
