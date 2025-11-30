@@ -87,3 +87,94 @@ head(pbp)
     ## #   IsTouchdown <dbl>, PassType <chr>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>,
     ## #   IsInterception <dbl>, IsFumble <dbl>, IsPenalty <dbl>, …
+
+``` r
+# Pass Rate By Down
+
+pbp %>%
+  filter(Down %in% 1:4) %>%
+  group_by(Down) %>%
+  summarize(pass_rate = mean(IsPass == 1, na.rm = TRUE)) %>%
+  ggplot(aes(x = factor(Down), y = pass_rate)) +
+  geom_col() +
+  labs(
+    title = "Pass Rate by Down",
+    x = "Down",
+    y = "Pass Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+``` r
+# Pass vs Run by Field Position
+
+pbp %>%
+  filter(YardLine >= 1, YardLine <= 99) %>%
+  group_by(YardLine) %>%
+  summarize(pass_rate = mean(IsPass == 1, na.rm = TRUE)) %>%
+  ggplot(aes(YardLine, pass_rate)) +
+  geom_line(size = 1.1) +
+  labs(
+    title = "Pass Rate by Yard Line",
+    x = "Field Position (1 = Own Endzone, 99 = Opponent Goal)",
+    y = "Pass Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+```
+
+    ## Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+    ## ℹ Please use `linewidth` instead.
+    ## This warning is displayed once every 8 hours.
+    ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
+    ## generated.
+
+![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+
+``` r
+# Yards Gained by Down
+
+pbp %>%
+  filter(Down %in% 1:4, Yards > -20 & Yards < 100) %>%  # removes oddities
+  group_by(Down) %>%
+  summarize(avg_yards = mean(Yards, na.rm = TRUE)) %>%
+  ggplot(aes(factor(Down), avg_yards)) +
+  geom_col() +
+  labs(
+    title = "Average Yards Gained by Down",
+    x = "Down",
+    y = "Average Yards Gained"
+  ) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+``` r
+# Play Type Frequency (Run, Pass, Sack)
+
+pbp %>%
+  mutate(
+    play_group = case_when(
+      IsPass == 1 ~ "Pass",
+      IsRush == 1 ~ "Rush",
+      IsSack == 1 ~ "Sack",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  count(play_group) %>%
+  ggplot(aes(x = reorder(play_group, n), y = n)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(
+      title = "Distribution of Play Types",
+      x = "Play Type",
+      y = "Count"
+    ) +
+    theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
