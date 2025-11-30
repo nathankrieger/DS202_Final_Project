@@ -178,3 +178,116 @@ pbp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+``` r
+#Rate of big plays (20 yards or more) by down
+pbp %>%
+  filter(Down %in% 1:4, !is.na(Yards)) %>%
+  mutate(big_play = Yards >= 20) %>%
+  group_by(Down) %>%
+  summarize(
+    big_play_count = sum(big_play),
+    total_plays = n(),
+    big_play_rate = big_play_count / total_plays
+  ) %>%
+  ggplot(aes(x = factor(Down), y = big_play_rate)) +
+  geom_col() +
+  labs(
+    title = "Number of Big Plays (20+ Yards) by Down",
+    x = "Down",
+    y = "Rate of Big Plays"
+  ) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+``` r
+# Yards to go on third vs likelyhood of run or pass
+pbp %>%
+  filter(Down == 3, !is.na(ToGo), ToGo > 0, ToGo <= 20) %>%
+  mutate(
+    togo_bin = cut(
+      ToGo,
+      breaks = c(0, 2, 4, 6, 8, 10, 15, 20),
+      include.lowest = TRUE,
+      right = TRUE,
+      labels = c("1–2", "3–4", "5–6", "7–8", "9–10", "11–15", "16–20")
+    )
+  ) %>%
+  group_by(togo_bin) %>%
+  summarize(
+    pass_rate = mean(IsPass == 1, na.rm = TRUE),
+    run_rate = mean(IsRush == 1, na.rm = TRUE),
+    n_plays = n()
+  ) %>%
+  pivot_longer(
+    cols = c(pass_rate, run_rate),
+    names_to = "play_type",
+    values_to = "rate"
+  ) %>%
+  mutate(
+    play_type = recode(play_type,
+      "pass_rate" = "Pass",
+      "run_rate" = "Run")
+  ) %>%
+  ggplot(aes(x = togo_bin, y = rate, fill = play_type)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "3rd Down Play Call by Yards to Go",
+    x = "Yards to Go (Binned)",
+    y = "Rate",
+    fill = "Play Type"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+``` r
+# Based on field position, how likely to go for it on 4th
+pbp %>%
+  filter(Down == 4,
+         YardLine >= 1, YardLine <= 99) %>%
+  mutate(
+    go_for_it = if_else(IsPass == 1 | IsRush == 1, 1L, 0L),
+    yard_bin = cut(
+      YardLine,
+      breaks = seq(0, 100, by = 10),
+      include.lowest = TRUE,
+      right = TRUE,
+      labels = c("1–10", "11–20", "21–30", "31–40", "41–50",
+                 "51–60", "61–70", "71–80", "81–90", "91–99")
+    )
+  ) %>%
+  group_by(yard_bin) %>%
+  summarize(
+    go_rate = mean(go_for_it, na.rm = TRUE),
+    n_plays = n()
+  ) %>%
+  ggplot(aes(x = yard_bin, y = go_rate, group = 1)) +
+  geom_line(size = 1.1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Go-For-It Rate on 4th Down by Field Position (Binned)",
+    x = "Field Position Bin",
+    y = "Go-For-It Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+``` r
+#Field goal count by quarter
+```
+
+``` r
+#likelyhood of interceptions based on down
+```
+
+``` r
+#likelyhood of interceptions based on field position
+```
