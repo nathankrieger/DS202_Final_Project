@@ -68,6 +68,7 @@ Formation
 And many more…
 
 ``` r
+# data exploration
 head(pbp)
 ```
 
@@ -87,6 +88,47 @@ head(pbp)
     ## #   IsTouchdown <dbl>, PassType <chr>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>,
     ## #   IsInterception <dbl>, IsFumble <dbl>, IsPenalty <dbl>, …
+
+``` r
+nrow(pbp)
+```
+
+    ## [1] 53283
+
+``` r
+pbp %>%
+  filter(IsPass == 1) %>%
+  summarize(
+    n_passes = n(),
+    n_ints   = sum(IsInterception == 1, na.rm = TRUE),
+    int_rate = mean(IsInterception == 1, na.rm = TRUE)
+  )
+```
+
+    ## # A tibble: 1 × 3
+    ##   n_passes n_ints int_rate
+    ##      <int>  <int>    <dbl>
+    ## 1    19551    442   0.0226
+
+``` r
+pbp %>%
+  filter(IsPass == 1,
+         YardLine >= 90, YardLine <= 99) %>%
+  summarize(
+    n_passes = n(),
+    n_ints   = sum(IsInterception == 1, na.rm = TRUE),
+    int_rate = mean(IsInterception == 1, na.rm = TRUE)
+  )
+```
+
+    ## # A tibble: 1 × 3
+    ##   n_passes n_ints int_rate
+    ##      <int>  <int>    <dbl>
+    ## 1       37      0        0
+
+``` r
+#pbp$PlayType
+```
 
 ``` r
 # Pass Rate By Down
@@ -282,12 +324,112 @@ pbp %>%
 
 ``` r
 #Field goal count by quarter
+pbp %>%
+  filter(PlayType == "FIELD GOAL") %>%
+  count(Quarter) %>%
+  ggplot(aes(x = factor(Quarter), y = n)) +
+  geom_col() +
+  labs(
+    title = "Field Goals Attempted by Quarter",
+    x = "Quarter",
+    y = "Field Goal Attempts"
+  ) +
+  theme_minimal()
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 #likelyhood of interceptions based on down
+
+pbp %>%
+  filter(IsPass == 1, Down %in% 1:4) %>%
+  group_by(Down) %>%
+  summarize(
+    int_rate = mean(IsInterception == 1, na.rm = TRUE),
+    n_passes = n()
+  ) %>%
+  ggplot(aes(x = factor(Down), y = int_rate)) +
+  geom_col() +
+  labs(
+    title = "Interception Rate by Down (Pass Plays Only)",
+    x = "Down",
+    y = "Interception Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
 ``` r
-#likelyhood of interceptions based on field position
+# Likelihood of interceptions based on field position 
+#Some bins only have a couple interceptions at most so it might not necessarily be the most reliable data
+pbp %>%
+  filter(IsPass == 1,
+         YardLine >= 1, YardLine <= 99) %>%
+  mutate(
+    yard_bin = cut(
+      YardLine,
+      breaks = seq(0, 100, by = 10),
+      include.lowest = TRUE,
+      right = TRUE,
+      labels = c("1–10", "11–20", "21–30", "31–40", "41–50",
+                 "51–60", "61–70", "71–80", "81–90", "91–99")
+    )
+  ) %>%
+  group_by(yard_bin) %>%
+  summarize(
+    int_rate = mean(IsInterception == 1, na.rm = TRUE),
+    n_passes = n()
+  ) %>%
+  ggplot(aes(x = yard_bin, y = int_rate, group = 1)) +
+  geom_line(size = 1.1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Interception Rate by Field Position (Pass Plays Only, Binned)",
+    x = "Field Position Bin",
+    y = "Interception Rate"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+``` r
+#Tracking "success" by using the 40%,60%,100% rule
+
+pbp %>%
+  filter(Down %in% 1:4) %>%
+  mutate(
+    success = case_when(
+      Down == 1 ~ Yards >= 0.4 * ToGo,
+      Down == 2 ~ Yards >= 0.6 * ToGo,
+      Down %in% 3:4 ~ Yards >= ToGo
+    )
+  ) %>%
+  group_by(Down) %>%
+  summarize(success_rate = mean(success, na.rm = TRUE)) %>%
+  ggplot(aes(factor(Down), success_rate)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title="Success Rate by Down", x="Down", y="Success Rate")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+``` r
+#Pass rate by Downs and Distance (excluding plays with more than 20 yards till first down/touchdown)
+pbp %>%
+  filter(Down %in% 1:4, ToGo <= 20) %>%
+  group_by(Down, ToGo) %>%
+  summarize(pass_rate = mean(IsPass == 1), .groups="drop") %>%
+  ggplot(aes(ToGo, factor(Down), fill = pass_rate)) +
+  geom_tile() +
+  scale_fill_viridis_c(labels = scales::percent) +
+  labs(title="Pass Rate Heatmap by Down & Distance",
+       x="Yards to Go", y="Down", fill="Pass Rate")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
