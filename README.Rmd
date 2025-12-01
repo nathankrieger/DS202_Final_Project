@@ -128,7 +128,7 @@ pbp$FieldGoalResult <- factor(
   pbp$FieldGoalResult,
   levels = c("NO GOOD", "BLOCKED", "GOOD", "N/A")
 )
-pbp$FieldGoalResult
+
 #inspecting safetys
 pbp %>%
   filter(str_detect(tolower(Description), "safety")) %>%
