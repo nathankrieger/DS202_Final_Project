@@ -80,7 +80,214 @@ pbp %>%
     n_ints   = sum(IsInterception == 1, na.rm = TRUE),
     int_rate = mean(IsInterception == 1, na.rm = TRUE)
   )
-#pbp$PlayType
+
+#We can make PlayType a factor, I think we probably should.
+#We can also make Pass Type a factor
+pbp <- pbp %>%
+  mutate(
+    PlayType = factor(PlayType),
+    PassType = factor(PassType)
+  )
+levels(pbp$PlayType)
+levels(pbp$PassType)
+
+
+
+```
+
+
+```{r}
+#inspecting field goals to prepare to add "score" variables to the dataset
+pbp %>%
+  filter(PlayType == "FIELD GOAL")
+  
+pbp <- pbp %>%
+  mutate(
+    FieldGoalResult = case_when(
+      # BLOCKED FG
+      PlayType == "FIELD GOAL" &
+        str_detect(tolower(Description), "blocked") ~ "BLOCKED",
+      
+      # GOOD FG (contains "good" but not "no good")
+      PlayType == "FIELD GOAL" &
+        str_detect(tolower(Description), "good") &
+        !str_detect(tolower(Description), "no good") ~ "GOOD",
+      
+      # NO GOOD FG
+      PlayType == "FIELD GOAL" &
+        str_detect(tolower(Description), "no good") ~ "NO GOOD",
+      
+      # Everything else
+      TRUE ~ "N/A"
+    )
+  )
+
+#making FieldGoalResult a factor
+
+pbp$FieldGoalResult <- factor(
+  pbp$FieldGoalResult,
+  levels = c("NO GOOD", "BLOCKED", "GOOD", "N/A")
+)
+pbp$FieldGoalResult
+#inspecting safetys
+pbp %>%
+  filter(str_detect(tolower(Description), "safety")) %>%
+  select(GameId, Quarter, Minute, Second, OffenseTeam, DefenseTeam, Description)
+
+pbp <- pbp %>%
+  mutate(
+    IsSafety = if_else(
+      str_detect(tolower(Description), "safety"),
+      1L,
+      0L
+    )
+  )
+
+#inspecting extra point
+pbp %>%
+  filter(PlayType == "EXTRA POINT") %>%
+  select(GameId, Quarter, Minute, Second, OffenseTeam, DefenseTeam, Description)
+
+
+pbp <- pbp %>%
+  mutate(
+    ExtraPointResult = case_when(
+      # BLOCKED XP
+      PlayType == "EXTRA POINT" &
+        str_detect(tolower(Description), "blocked") ~ "BLOCKED",
+      
+      # GOOD XP
+      PlayType == "EXTRA POINT" &
+        str_detect(tolower(Description), "good") &
+        !str_detect(tolower(Description), "no good") ~ "GOOD",
+      
+      # NO GOOD XP
+      PlayType == "EXTRA POINT" &
+        str_detect(tolower(Description), "no good") ~ "NO GOOD",
+      
+      # Everything else (not an XP)
+      TRUE ~ "N/A"
+    )
+  )
+
+#investigating blocked XP or returned 2 point conversions, there was one for PHILI Eagles vs Buccs
+pbp %>%
+  filter(
+    str_detect(tolower(Description), "defensive two-point")
+  )
+
+#adding defensive two-points
+pbp <- pbp %>%
+  mutate(
+    DefensiveTwoPoint = if_else(
+      PlayType %in% c("EXTRA POINT", "TWO-POINT CONVERSION") &
+        str_detect(tolower(Description), "two-point attempt") &
+        str_detect(tolower(Description), "attempt succeeds"),
+      1L,
+      0L
+    )
+  )
+
+#Okay now we should have data on all scoring plays
+
+```
+
+```{r}
+#now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
+pbp <- pbp %>%
+  arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%
+  group_by(GameId) %>%
+  mutate(
+    PlayIndex = row_number(),
+
+    # Offensive points on this play
+    OffPointsPlay =
+      if_else(IsTouchdown == 1, 6L, 0L) +
+      if_else(FieldGoalResult == "GOOD", 3L, 0L) +
+      if_else(ExtraPointResult == "GOOD", 1L, 0L) +
+      if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
+
+    # Defensive points on this play
+    DefPointsPlay =
+      if_else(IsSafety == 1, 2L, 0L) +
+      if_else(DefensiveTwoPoint == 1, 2L, 0L)
+  ) %>%
+  ungroup()
+
+
+
+#Build long-format team scoring table
+
+team_scores_long <- pbp %>%
+  select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+  
+  # Offensive scoring rows
+  transmute(
+    GameId,
+    PlayIndex,
+    Team   = OffenseTeam,
+    Points = OffPointsPlay
+  ) %>%
+  
+  # Bind defensive scoring rows
+  bind_rows(
+    pbp %>%
+      select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+      transmute(
+        GameId,
+        PlayIndex,
+        Team   = DefenseTeam,
+        Points = DefPointsPlay
+      )
+  ) %>%
+  
+  arrange(GameId, PlayIndex) %>%
+  group_by(GameId, Team) %>%
+  mutate(TeamScore = cumsum(Points)) %>%
+  ungroup()
+
+
+# Join back to original PBP 
+
+pbp <- pbp %>%
+  left_join(
+    team_scores_long %>% rename(OffenseScore = TeamScore),
+    by = c("GameId", "PlayIndex", "OffenseTeam" = "Team")
+  ) %>%
+  left_join(
+    team_scores_long %>% rename(DefenseScore = TeamScore),
+    by = c("GameId", "PlayIndex", "DefenseTeam" = "Team")
+  ) %>%
+  
+  mutate(
+    ScoreDiff = OffenseScore - DefenseScore
+  )
+
+
+```
+
+```{r}
+#investigating to make sure that was right
+#Example, Kansas City vs Ravens:
+#KC (1), BAL (2)
+#0 - 7, 7-7, 10-7, 13-7, 13-10, 20- 10, 20 - 17, 27 -17, 27- 20
+pbp %>%
+  filter(GameId == 2024090500) 
+
+#Just discovered something horrible about our data... if a play is a touchdown which is later reversed due to ref decision, then the isTouchdown variable is still marked as a 1, not a 0. This is detrimental to our scoring system, I will have to try to find if there is some consistent way to get the scores corrected or if we are just doomed forever.
+
+#looking for isTouchdown and description contains reversed
+pbp %>%
+  filter(
+    IsTouchdown == 1,
+    str_detect(tolower(Description), "reversed")
+  )
+
+#we might be ****ed: (5:00) (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE TO NO 1 FOR 2 YARDS (29-P.ADEBO). FUMBLES (29-P.ADEBO), RECOVERED BY CAR-15-J.MINGO AT NO 1. THE REPLAY OFFICIAL REVIEWED THE SHORT OF THE GOAL LINE RULING, AND THE PLAY WAS REVERSED. (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE FOR 3 YARDS, TOUCHDOWN.	
+
+#that text displays how even when "reversed" occurs, it doesn't necessarily mean the touchdown was reversed... I have no clue what to do.
+
+#it looks like if "TOUCHDOWN" occurs after "reversed" in the description then it is a touchdown, otherwise it is not a touchdown.
 ```
 
 ``` {r}
