@@ -132,7 +132,8 @@ pbp %>%
 pbp <- pbp %>%
   mutate(
     PlayType = factor(PlayType),
-    PassType = factor(PassType)
+    PassType = factor(PassType),
+    Formation = factor(Formation)
   )
 levels(pbp$PlayType)
 ```
@@ -150,6 +151,13 @@ levels(pbp$PassType)
 
     ## [1] "BACK TO"      "DEEP LEFT"    "DEEP MIDDLE"  "DEEP RIGHT"   "SHORT LEFT"  
     ## [6] "SHORT MIDDLE" "SHORT RIGHT"
+
+``` r
+levels(pbp$Formation)
+```
+
+    ## [1] "FIELD GOAL"        "NO HUDDLE"         "NO HUDDLE SHOTGUN"
+    ## [4] "PUNT"              "SHOTGUN"           "UNDER CENTER"
 
 ``` r
 #inspecting field goals to prepare to add "score" variables to the dataset
@@ -173,7 +181,7 @@ pbp %>%
     ## # ℹ 1,152 more rows
     ## # ℹ 36 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
     ## #   IsTouchdown <dbl>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
@@ -305,7 +313,7 @@ pbp %>%
     ## 8    2.02e9 2024-12-28       3      8     31 ARI         LA              0     0
     ## # ℹ 39 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
     ## #   IsTouchdown <dbl>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>,
@@ -331,7 +339,7 @@ pbp <- pbp %>%
 #now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
 build_scores <- function(data) {
   
-  # 🔹 0) Drop old score-related columns if they exist
+  #0) Drop old score-related columns if they exist
   data <- data %>%
     select(-any_of(c(
       "PlayIndex",
@@ -351,15 +359,20 @@ build_scores <- function(data) {
 
       # Offensive points on this play
       OffPointsPlay =
-        if_else(IsTouchdown == 1, 6L, 0L) +
+        if_else(IsTouchdown == 1 & IsInterception == 0, 6L, 0L) +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
 
       # Defensive points on this play
       DefPointsPlay =
+        if_else(IsTouchdown == 1 & IsInterception == 1, 6L, 0L) +
         if_else(IsSafety == 1, 2L, 0L) +
-        if_else(DefensiveTwoPoint == 1, 2L, 0L)
+        if_else(DefensiveTwoPoint == 1, 2L, 0L),
+      
+      OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
+      DefPointsPlay = if_else(IsNoPlay == 1, 0L, DefPointsPlay)
+
     ) %>%
     ungroup()
   
@@ -443,7 +456,7 @@ pbp %>%
     ## # ℹ 183 more rows
     ## # ℹ 46 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
     ## #   IsTouchdown <dbl>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
@@ -475,7 +488,7 @@ pbp %>%
     ## # ℹ 61 more rows
     ## # ℹ 46 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
     ## #   IsTouchdown <dbl>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
@@ -568,14 +581,92 @@ pbp %>%
     ## # ℹ 183 more rows
     ## # ℹ 47 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
     ## #   IsTouchdown <int>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
 
 ``` r
 #the final score is correct!
+
+
+final_scores <- pbp %>%
+  group_by(GameId) %>%
+  slice_max(PlayIndex, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(
+    GameId,
+    Team1  = OffenseTeam,
+    Score1 = OffenseScore,
+    Team2  = DefenseTeam,
+    Score2 = DefenseScore
+  )
+
+final_scores
 ```
+
+    ## # A tibble: 284 × 5
+    ##        GameId Team1 Score1 Team2 Score2
+    ##         <dbl> <chr>  <int> <chr>  <int>
+    ##  1 2024090500 BAL       20 KC        27
+    ##  2 2024090600 GB        29 PHI       34
+    ##  3 2024090800 ATL       10 PIT       18
+    ##  4 2024090801 BUF       34 ARI       28
+    ##  5 2024090802 CHI       18 TEN       23
+    ##  6 2024090803 NE        16 CIN       10
+    ##  7 2024090804 HOU       29 IND       27
+    ##  8 2024090805 MIA       20 JAX       17
+    ##  9 2024090806 CAR       10 NO        47
+    ## 10 2024090807 MIN       27 NYG        7
+    ## # ℹ 274 more rows
+
+``` r
+#Bills vs Chiefs, one point off, why?
+#0-7, 3-7, 10-7, 10-14, 10-21, 16-21, 22-21, 22-29, 29-29,29-32
+pbp %>% 
+  filter(GameId == 2025012601) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay)
+```
+
+    ## # A tibble: 191 × 6
+    ##    OffenseTeam OffenseScore DefenseTeam DefenseScore Description        IsNoPlay
+    ##    <chr>              <int> <chr>              <int> <chr>                 <dbl>
+    ##  1 BUF                    0 KC                     0 7-H.BUTKER KICKS …        0
+    ##  2 BUF                    0 KC                     0 (15:00) (SHOTGUN)…        0
+    ##  3 BUF                    0 KC                     0 (14:22) (SHOTGUN)…        0
+    ##  4 BUF                    0 KC                     0 (14:17) (SHOTGUN)…        0
+    ##  5 BUF                    0 KC                     0 (14:08) 8-S.MARTI…        0
+    ##  6 KC                     0 BUF                    0 (14:01) (SHOTGUN)…        0
+    ##  7 KC                     0 BUF                    0 (13:29) (SHOTGUN)…        0
+    ##  8 KC                     0 BUF                    0 (12:56) (SHOTGUN)…        0
+    ##  9 KC                     0 BUF                    0 (12:10) (SHOTGUN)…        0
+    ## 10 KC                     0 BUF                    0 (11:31) (SHOTGUN)…        0
+    ## # ℹ 181 more rows
+
+``` r
+# we were still adding points even on noplays
+
+#if a pick 6 happens we are adding points to offence, not defense
+pbp %>% 
+  filter( GameId == 2025011801) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+```
+
+    ## # A tibble: 208 × 7
+    ##    OffenseTeam OffenseScore DefenseTeam DefenseScore Description        IsNoPlay
+    ##    <chr>              <int> <chr>              <int> <chr>                 <dbl>
+    ##  1 DET                    0 WAS                    0 47-Z.GONZALEZ KIC…        0
+    ##  2 DET                    0 WAS                    0 (15:00) 5-D.MONTG…        0
+    ##  3 DET                    0 WAS                    0 (14:30) 5-D.MONTG…        0
+    ##  4 DET                    0 WAS                    0 (13:58) (SHOTGUN)…        0
+    ##  5 DET                    0 WAS                    0 (13:53) 3-J.FOX P…        0
+    ##  6 WAS                    0 DET                    0 (13:45) (SHOTGUN)…        0
+    ##  7 WAS                    0 DET                    0 (13:20) (NO HUDDL…        0
+    ##  8 WAS                    0 DET                    0 TIMEOUT AT 13:10.         0
+    ##  9 WAS                    0 DET                    0 (13:00) (SHOTGUN)…        0
+    ## 10 WAS                    0 DET                    0 (12:22) (NO HUDDL…        0
+    ## # ℹ 198 more rows
+    ## # ℹ 1 more variable: IsInterception <dbl>
 
 ``` r
 # Pass Rate By Down

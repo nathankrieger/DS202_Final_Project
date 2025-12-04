@@ -86,10 +86,12 @@ pbp %>%
 pbp <- pbp %>%
   mutate(
     PlayType = factor(PlayType),
-    PassType = factor(PassType)
+    PassType = factor(PassType),
+    Formation = factor(Formation)
   )
 levels(pbp$PlayType)
 levels(pbp$PassType)
+levels(pbp$Formation)
 
 
 
@@ -196,7 +198,7 @@ pbp <- pbp %>%
 #now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
 build_scores <- function(data) {
   
-  # 🔹 0) Drop old score-related columns if they exist
+  #0) Drop old score-related columns if they exist
   data <- data %>%
     select(-any_of(c(
       "PlayIndex",
@@ -216,15 +218,20 @@ build_scores <- function(data) {
 
       # Offensive points on this play
       OffPointsPlay =
-        if_else(IsTouchdown == 1, 6L, 0L) +
+        if_else(IsTouchdown == 1 & IsInterception == 0, 6L, 0L) +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
 
       # Defensive points on this play
       DefPointsPlay =
+        if_else(IsTouchdown == 1 & IsInterception == 1, 6L, 0L) +
         if_else(IsSafety == 1, 2L, 0L) +
-        if_else(DefensiveTwoPoint == 1, 2L, 0L)
+        if_else(DefensiveTwoPoint == 1, 2L, 0L),
+      
+      OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
+      DefPointsPlay = if_else(IsNoPlay == 1, 0L, DefPointsPlay)
+
     ) %>%
     ungroup()
   
@@ -353,6 +360,34 @@ pbp %>%
   filter(GameId == 2024090500) 
 
 #the final score is correct!
+
+
+final_scores <- pbp %>%
+  group_by(GameId) %>%
+  slice_max(PlayIndex, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(
+    GameId,
+    Team1  = OffenseTeam,
+    Score1 = OffenseScore,
+    Team2  = DefenseTeam,
+    Score2 = DefenseScore
+  )
+
+final_scores
+
+
+#Bills vs Chiefs, one point off, why?
+#0-7, 3-7, 10-7, 10-14, 10-21, 16-21, 22-21, 22-29, 29-29,29-32
+pbp %>% 
+  filter(GameId == 2025012601) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay)
+# we were still adding points even on noplays
+
+#if a pick 6 happens we are adding points to offence, not defense
+pbp %>% 
+  filter( GameId == 2025011801) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
 ```
 
 ``` {r}
