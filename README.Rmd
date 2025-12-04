@@ -194,76 +194,93 @@ pbp <- pbp %>%
 
 ```{r}
 #now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
-pbp <- pbp %>%
-  arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%
-  group_by(GameId) %>%
-  mutate(
-    PlayIndex = row_number(),
-
-    # Offensive points on this play
-    OffPointsPlay =
-      if_else(IsTouchdown == 1, 6L, 0L) +
-      if_else(FieldGoalResult == "GOOD", 3L, 0L) +
-      if_else(ExtraPointResult == "GOOD", 1L, 0L) +
-      if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
-
-    # Defensive points on this play
-    DefPointsPlay =
-      if_else(IsSafety == 1, 2L, 0L) +
-      if_else(DefensiveTwoPoint == 1, 2L, 0L)
-  ) %>%
-  ungroup()
-
-
-
-#Build long-format team scoring table
-
-team_scores_long <- pbp %>%
-  select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+build_scores <- function(data) {
   
-  # Offensive scoring rows
-  transmute(
-    GameId,
-    PlayIndex,
-    Team   = OffenseTeam,
-    Points = OffPointsPlay
-  ) %>%
+  # 🔹 0) Drop old score-related columns if they exist
+  data <- data %>%
+    select(-any_of(c(
+      "PlayIndex",
+      "OffPointsPlay",
+      "DefPointsPlay",
+      "OffenseScore",
+      "DefenseScore",
+      "ScoreDiff"
+    )))
   
-  # Bind defensive scoring rows
-  bind_rows(
-    pbp %>%
-      select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
-      transmute(
-        GameId,
-        PlayIndex,
-        Team   = DefenseTeam,
-        Points = DefPointsPlay
-      )
-  ) %>%
+  # 1) Compute play-level scoring + PlayIndex
+  data_scored <- data %>%
+    arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%  # correct time order
+    group_by(GameId) %>%
+    mutate(
+      PlayIndex = row_number(),
+
+      # Offensive points on this play
+      OffPointsPlay =
+        if_else(IsTouchdown == 1, 6L, 0L) +
+        if_else(FieldGoalResult == "GOOD", 3L, 0L) +
+        if_else(ExtraPointResult == "GOOD", 1L, 0L) +
+        if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
+
+      # Defensive points on this play
+      DefPointsPlay =
+        if_else(IsSafety == 1, 2L, 0L) +
+        if_else(DefensiveTwoPoint == 1, 2L, 0L)
+    ) %>%
+    ungroup()
   
-  arrange(GameId, PlayIndex) %>%
-  group_by(GameId, Team) %>%
-  mutate(TeamScore = cumsum(Points)) %>%
-  ungroup()
-
-
-# Join back to original PBP 
-
-pbp <- pbp %>%
-  left_join(
-    team_scores_long %>% rename(OffenseScore = TeamScore),
-    by = c("GameId", "PlayIndex", "OffenseTeam" = "Team")
-  ) %>%
-  left_join(
-    team_scores_long %>% rename(DefenseScore = TeamScore),
-    by = c("GameId", "PlayIndex", "DefenseTeam" = "Team")
-  ) %>%
+  # 2) Long-format team scoring table
+  team_scores_long <- data_scored %>%
+    select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+    
+    # Offense rows
+    transmute(
+      GameId,
+      PlayIndex,
+      Team   = OffenseTeam,
+      Points = OffPointsPlay
+    ) %>%
+    
+    # Defense rows
+    bind_rows(
+      data_scored %>%
+        select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+        transmute(
+          GameId,
+          PlayIndex,
+          Team   = DefenseTeam,
+          Points = DefPointsPlay
+        )
+    ) %>%
+    
+    arrange(GameId, PlayIndex) %>%
+    group_by(GameId, Team) %>%
+    mutate(TeamScore = cumsum(Points)) %>%
+    ungroup()
   
-  mutate(
-    ScoreDiff = OffenseScore - DefenseScore
-  )
-
-
+  # 3) Join back to scored data
+  data_joined <- data_scored %>%
+    left_join(
+      team_scores_long %>%
+        select(GameId, PlayIndex, Team, TeamScore) %>%
+        rename(OffenseTeam = Team, OffenseScore = TeamScore),
+      by = c("GameId", "PlayIndex", "OffenseTeam")
+    ) %>%
+    left_join(
+      team_scores_long %>%
+        select(GameId, PlayIndex, Team, TeamScore) %>%
+        rename(DefenseTeam = Team, DefenseScore = TeamScore),
+      by = c("GameId", "PlayIndex", "DefenseTeam")
+    )
+  
+  # 4) Now OffenseScore / DefenseScore exist for sure
+  data_final <- data_joined %>%
+    mutate(
+      ScoreDiff = OffenseScore - DefenseScore
+    )
+  
+  return(data_final)
+}
+pbp <- build_scores(pbp)
 ```
 
 ```{r}
@@ -288,6 +305,54 @@ pbp %>%
 #that text displays how even when "reversed" occurs, it doesn't necessarily mean the touchdown was reversed... I have no clue what to do.
 
 #it looks like if "TOUCHDOWN" occurs after "reversed" in the description then it is a touchdown, otherwise it is not a touchdown.
+
+
+pbp <- pbp %>%
+  mutate(
+    desc_lower = tolower(Description),
+
+    td_pos  = str_locate(desc_lower, "touchdown")[, 1],
+    rev_pos = str_locate(desc_lower, "reversed")[, 1],
+
+    CorrectIsTouchdown = case_when(
+      # No "touchdown" in text at all
+      is.na(td_pos) ~ 0L,
+
+      # "touchdown" present, but no "reversed"
+      !is.na(td_pos) & is.na(rev_pos) ~ 1L,
+
+      # Both appear, and touchdown comes AFTER reversed TD stands
+      !is.na(td_pos) & !is.na(rev_pos) & td_pos > rev_pos ~ 1L,
+
+      # Both appear, and touchdown comes BEFORE reversed TD overturned
+      !is.na(td_pos) & !is.na(rev_pos) & td_pos < rev_pos ~ 0L
+    )
+  ) %>%
+  select(-desc_lower, -td_pos, -rev_pos)  # clean up helpers
+
+pbp %>%
+  filter(IsTouchdown != CorrectIsTouchdown) %>%
+  select(GameId, Quarter, Minute, Second, OffenseTeam, DefenseTeam,
+         IsTouchdown, CorrectIsTouchdown, Description)
+#It looks like my "CorrectIsTouchdown" variable  can detect these "False Touchdowns" effectively
+```
+
+
+```{r}
+#reapplying my score function except this time isTouchdown accurately describes whether or not a touchdown is a touchdown.
+pbp <- pbp %>%
+  mutate(
+    IsTouchdown = CorrectIsTouchdown  
+  )
+pbp <- build_scores(pbp)
+
+#Example, Kansas City vs Ravens:
+#KC (1), BAL (2)
+#0 - 7, 7-7, 10-7, 13-7, 13-10, 20- 10, 20 - 17, 27 -17, 27- 20
+pbp %>%
+  filter(GameId == 2024090500) 
+
+#the final score is correct!
 ```
 
 ``` {r}

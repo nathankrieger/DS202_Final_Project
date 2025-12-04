@@ -329,74 +329,93 @@ pbp <- pbp %>%
 
 ``` r
 #now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
-pbp <- pbp %>%
-  arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%
-  group_by(GameId) %>%
-  mutate(
-    PlayIndex = row_number(),
-
-    # Offensive points on this play
-    OffPointsPlay =
-      if_else(IsTouchdown == 1, 6L, 0L) +
-      if_else(FieldGoalResult == "GOOD", 3L, 0L) +
-      if_else(ExtraPointResult == "GOOD", 1L, 0L) +
-      if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
-
-    # Defensive points on this play
-    DefPointsPlay =
-      if_else(IsSafety == 1, 2L, 0L) +
-      if_else(DefensiveTwoPoint == 1, 2L, 0L)
-  ) %>%
-  ungroup()
-
-
-
-#Build long-format team scoring table
-
-team_scores_long <- pbp %>%
-  select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+build_scores <- function(data) {
   
-  # Offensive scoring rows
-  transmute(
-    GameId,
-    PlayIndex,
-    Team   = OffenseTeam,
-    Points = OffPointsPlay
-  ) %>%
+  # 🔹 0) Drop old score-related columns if they exist
+  data <- data %>%
+    select(-any_of(c(
+      "PlayIndex",
+      "OffPointsPlay",
+      "DefPointsPlay",
+      "OffenseScore",
+      "DefenseScore",
+      "ScoreDiff"
+    )))
   
-  # Bind defensive scoring rows
-  bind_rows(
-    pbp %>%
-      select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
-      transmute(
-        GameId,
-        PlayIndex,
-        Team   = DefenseTeam,
-        Points = DefPointsPlay
-      )
-  ) %>%
+  # 1) Compute play-level scoring + PlayIndex
+  data_scored <- data %>%
+    arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%  # correct time order
+    group_by(GameId) %>%
+    mutate(
+      PlayIndex = row_number(),
+
+      # Offensive points on this play
+      OffPointsPlay =
+        if_else(IsTouchdown == 1, 6L, 0L) +
+        if_else(FieldGoalResult == "GOOD", 3L, 0L) +
+        if_else(ExtraPointResult == "GOOD", 1L, 0L) +
+        if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
+
+      # Defensive points on this play
+      DefPointsPlay =
+        if_else(IsSafety == 1, 2L, 0L) +
+        if_else(DefensiveTwoPoint == 1, 2L, 0L)
+    ) %>%
+    ungroup()
   
-  arrange(GameId, PlayIndex) %>%
-  group_by(GameId, Team) %>%
-  mutate(TeamScore = cumsum(Points)) %>%
-  ungroup()
-
-
-# Join back to original PBP 
-
-pbp <- pbp %>%
-  left_join(
-    team_scores_long %>% rename(OffenseScore = TeamScore),
-    by = c("GameId", "PlayIndex", "OffenseTeam" = "Team")
-  ) %>%
-  left_join(
-    team_scores_long %>% rename(DefenseScore = TeamScore),
-    by = c("GameId", "PlayIndex", "DefenseTeam" = "Team")
-  ) %>%
+  # 2) Long-format team scoring table
+  team_scores_long <- data_scored %>%
+    select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+    
+    # Offense rows
+    transmute(
+      GameId,
+      PlayIndex,
+      Team   = OffenseTeam,
+      Points = OffPointsPlay
+    ) %>%
+    
+    # Defense rows
+    bind_rows(
+      data_scored %>%
+        select(GameId, PlayIndex, OffenseTeam, DefenseTeam, OffPointsPlay, DefPointsPlay) %>%
+        transmute(
+          GameId,
+          PlayIndex,
+          Team   = DefenseTeam,
+          Points = DefPointsPlay
+        )
+    ) %>%
+    
+    arrange(GameId, PlayIndex) %>%
+    group_by(GameId, Team) %>%
+    mutate(TeamScore = cumsum(Points)) %>%
+    ungroup()
   
-  mutate(
-    ScoreDiff = OffenseScore - DefenseScore
-  )
+  # 3) Join back to scored data
+  data_joined <- data_scored %>%
+    left_join(
+      team_scores_long %>%
+        select(GameId, PlayIndex, Team, TeamScore) %>%
+        rename(OffenseTeam = Team, OffenseScore = TeamScore),
+      by = c("GameId", "PlayIndex", "OffenseTeam")
+    ) %>%
+    left_join(
+      team_scores_long %>%
+        select(GameId, PlayIndex, Team, TeamScore) %>%
+        rename(DefenseTeam = Team, DefenseScore = TeamScore),
+      by = c("GameId", "PlayIndex", "DefenseTeam")
+    )
+  
+  # 4) Now OffenseScore / DefenseScore exist for sure
+  data_final <- data_joined %>%
+    mutate(
+      ScoreDiff = OffenseScore - DefenseScore
+    )
+  
+  return(data_final)
+}
+pbp <- build_scores(pbp)
 ```
 
 ``` r
@@ -408,7 +427,7 @@ pbp %>%
   filter(GameId == 2024090500) 
 ```
 
-    ## # A tibble: 193 × 57
+    ## # A tibble: 193 × 55
     ##      GameId GameDate   Quarter Minute Second OffenseTeam DefenseTeam  Down  ToGo
     ##       <dbl> <date>       <dbl>  <dbl>  <dbl> <chr>       <chr>       <dbl> <dbl>
     ##  1   2.02e9 2024-09-05       1     15      0 BAL         KC              0     0
@@ -422,7 +441,7 @@ pbp %>%
     ##  9   2.02e9 2024-09-05       1     11     49 BAL         KC              3     9
     ## 10   2.02e9 2024-09-05       1     11      5 BAL         KC              1    10
     ## # ℹ 183 more rows
-    ## # ℹ 48 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
+    ## # ℹ 46 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
     ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
@@ -440,7 +459,7 @@ pbp %>%
   )
 ```
 
-    ## # A tibble: 71 × 57
+    ## # A tibble: 71 × 55
     ##      GameId GameDate   Quarter Minute Second OffenseTeam DefenseTeam  Down  ToGo
     ##       <dbl> <date>       <dbl>  <dbl>  <dbl> <chr>       <chr>       <dbl> <dbl>
     ##  1   2.02e9 2024-09-05       4      0      5 BAL         KC              3    10
@@ -454,7 +473,7 @@ pbp %>%
     ##  9   2.02e9 2024-09-29       4      5      2 PHI         TB              2    15
     ## 10   2.02e9 2024-09-30       2     10     51 SEA         DET             2     8
     ## # ℹ 61 more rows
-    ## # ℹ 48 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
+    ## # ℹ 46 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
     ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
     ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
     ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
@@ -467,6 +486,95 @@ pbp %>%
 #that text displays how even when "reversed" occurs, it doesn't necessarily mean the touchdown was reversed... I have no clue what to do.
 
 #it looks like if "TOUCHDOWN" occurs after "reversed" in the description then it is a touchdown, otherwise it is not a touchdown.
+
+
+pbp <- pbp %>%
+  mutate(
+    desc_lower = tolower(Description),
+
+    td_pos  = str_locate(desc_lower, "touchdown")[, 1],
+    rev_pos = str_locate(desc_lower, "reversed")[, 1],
+
+    CorrectIsTouchdown = case_when(
+      # No "touchdown" in text at all
+      is.na(td_pos) ~ 0L,
+
+      # "touchdown" present, but no "reversed"
+      !is.na(td_pos) & is.na(rev_pos) ~ 1L,
+
+      # Both appear, and touchdown comes AFTER reversed TD stands
+      !is.na(td_pos) & !is.na(rev_pos) & td_pos > rev_pos ~ 1L,
+
+      # Both appear, and touchdown comes BEFORE reversed TD overturned
+      !is.na(td_pos) & !is.na(rev_pos) & td_pos < rev_pos ~ 0L
+    )
+  ) %>%
+  select(-desc_lower, -td_pos, -rev_pos)  # clean up helpers
+
+pbp %>%
+  filter(IsTouchdown != CorrectIsTouchdown) %>%
+  select(GameId, Quarter, Minute, Second, OffenseTeam, DefenseTeam,
+         IsTouchdown, CorrectIsTouchdown, Description)
+```
+
+    ## # A tibble: 63 × 9
+    ##        GameId Quarter Minute Second OffenseTeam DefenseTeam IsTouchdown
+    ##         <dbl>   <dbl>  <dbl>  <dbl> <chr>       <chr>             <dbl>
+    ##  1 2024090500       4      0      5 BAL         KC                    1
+    ##  2 2024090803       2      5     24 CIN         NE                    1
+    ##  3 2024090811       4      1     38 WAS         TB                    1
+    ##  4 2024091600       4      7      9 PHI         ATL                   1
+    ##  5 2024092907       3      7      6 TB          PHI                   1
+    ##  6 2024092907       4      5      2 PHI         TB                    1
+    ##  7 2024093001       2     10     51 SEA         DET                   1
+    ##  8 2024100601       2      2     24 CHI         CAR                   1
+    ##  9 2024100602       1      9     12 BAL         CIN                   1
+    ## 10 2024100604       4      4     49 IND         JAX                   1
+    ## # ℹ 53 more rows
+    ## # ℹ 2 more variables: CorrectIsTouchdown <int>, Description <chr>
+
+``` r
+#It looks like my "CorrectIsTouchdown" variable  can detect these "False Touchdowns" effectively
+```
+
+``` r
+#reapplying my score function except this time isTouchdown accurately describes whether or not a touchdown is a touchdown.
+pbp <- pbp %>%
+  mutate(
+    IsTouchdown = CorrectIsTouchdown  
+  )
+pbp <- build_scores(pbp)
+
+#Example, Kansas City vs Ravens:
+#KC (1), BAL (2)
+#0 - 7, 7-7, 10-7, 13-7, 13-10, 20- 10, 20 - 17, 27 -17, 27- 20
+pbp %>%
+  filter(GameId == 2024090500) 
+```
+
+    ## # A tibble: 193 × 56
+    ##      GameId GameDate   Quarter Minute Second OffenseTeam DefenseTeam  Down  ToGo
+    ##       <dbl> <date>       <dbl>  <dbl>  <dbl> <chr>       <chr>       <dbl> <dbl>
+    ##  1   2.02e9 2024-09-05       1     15      0 BAL         KC              0     0
+    ##  2   2.02e9 2024-09-05       1     15      0 BAL         KC              1    10
+    ##  3   2.02e9 2024-09-05       1     14     19 BAL         KC              2     8
+    ##  4   2.02e9 2024-09-05       1     13     55 BAL         KC              2    13
+    ##  5   2.02e9 2024-09-05       1     13     20 BAL         KC              3    11
+    ##  6   2.02e9 2024-09-05       1     12     43 BAL         KC              1    10
+    ##  7   2.02e9 2024-09-05       1     12      0 BAL         KC              2     9
+    ##  8   2.02e9 2024-09-05       1     11     55 BAL         KC              3     9
+    ##  9   2.02e9 2024-09-05       1     11     49 BAL         KC              3     9
+    ## 10   2.02e9 2024-09-05       1     11      5 BAL         KC              1    10
+    ## # ℹ 183 more rows
+    ## # ℹ 47 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
+    ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <chr>,
+    ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
+    ## #   IsTouchdown <int>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
+    ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
+
+``` r
+#the final score is correct!
 ```
 
 ``` r
@@ -487,7 +595,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 # Pass vs Run by Field Position
@@ -513,7 +621,7 @@ pbp %>%
     ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
     ## generated.
 
-![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 # Yards Gained by Down
@@ -532,7 +640,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ``` r
 # Play Type Frequency (Run, Pass, Sack)
@@ -558,7 +666,7 @@ pbp %>%
     theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 #Rate of big plays (20 yards or more) by down
@@ -581,7 +689,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ``` r
 # Yards to go on third vs likelyhood of run or pass
@@ -624,7 +732,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ``` r
 # Based on field position, how likely to go for it on 4th
@@ -659,7 +767,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ``` r
 #Field goal count by quarter
@@ -676,7 +784,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 #likelyhood of interceptions based on down
@@ -699,7 +807,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ``` r
 # Likelihood of interceptions based on field position 
@@ -734,7 +842,7 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 #Tracking "success" by using the 40%,60%,100% rule
@@ -756,7 +864,7 @@ pbp %>%
   labs(title="Success Rate by Down", x="Down", y="Success Rate")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ``` r
 #Pass rate by Downs and Distance (excluding plays with more than 20 yards till first down/touchdown)
@@ -771,4 +879,4 @@ pbp %>%
        x="Yards to Go", y="Down", fill="Pass Rate")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
