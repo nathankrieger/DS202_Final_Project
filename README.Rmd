@@ -690,3 +690,153 @@ pbp %>%
 
 ```
 
+*Diving Deeper: Analyzing what makes a team successful*
+**Find the highest scoring teams**
+
+``` {r}
+final_scores
+
+
+team_points <- final_scores %>%
+  # Stack both sides of each game into one long dataset
+  select(GameId, Team = Team1, Points = Score1) %>%
+  bind_rows(
+    final_scores %>%
+      select(GameId, Team = Team2, Points = Score2)
+  ) %>%
+  group_by(Team) %>%
+  summarize(
+    TotalPoints = sum(Points, na.rm = TRUE),
+    Games = n(),
+    AvgPoints = TotalPoints / Games,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(TotalPoints))
+
+top_team <- team_points$Team[1]
+top_team
+
+
+
+```
+
+- Based on the data, Buffalo was the highest scoring team of the 2024 season
+- Get all games involving that team
+
+``` {r}
+
+top_team_games <- final_scores %>%
+  filter(Team1 == top_team | Team2 == top_team) %>%
+  select(GameId, Team1, Team2, Score1, Score2)
+
+```
+
+- Filter play-by-play to just those games
+
+``` {r}
+
+top_team_pbp <- pbp %>%
+  semi_join(top_team_games, by = "GameId")
+
+
+```
+
+- Analyze offensive performance for the highest-scoring team
+
+``` {r}
+
+team_offense <- top_team_pbp %>%
+  filter(OffenseTeam == top_team)
+
+
+```
+
+- High-level offensive efficiency
+
+``` {r}
+team_summary <- team_offense %>%
+  group_by(GameId) %>%
+  summarize(
+    Plays = n(),
+    Rushes = sum(IsRush == 1, na.rm = TRUE),
+    Passes = sum(IsPass == 1, na.rm = TRUE),
+    TotalYards = sum(Yards, na.rm = TRUE),
+    YPP = mean(Yards, na.rm = TRUE),
+    SuccessRate = mean(Yards > 0, na.rm = TRUE),
+    Explosives = sum(Yards >= 15, na.rm = TRUE),
+    TDs = sum(IsTouchdown == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(YPP))
+
+
+```
+
+
+- Play-calling tendencies
+
+``` {r}
+
+playcalling <- team_offense %>%
+  summarize(
+    TotalPlays = n(),
+    PassRate = mean(IsPass == 1),
+    RushRate = mean(IsRush == 1),
+    AvgDepth = mean(Yards, na.rm = TRUE),
+    Explosives = sum(Yards >= 15, na.rm = TRUE)
+  )
+
+
+```
+
+- Down-and-distance efficiency
+
+``` {r}
+
+down_eff <- team_offense %>%
+  filter(Down > 0) %>%
+  group_by(Down) %>%
+  summarize(
+    PassRate = mean(IsPass == 1, na.rm = TRUE),
+    YardsPerPlay = mean(Yards, na.rm = TRUE),
+    SuccessRate = mean(Yards > 0, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+```
+
+- Field position / starting field
+
+``` {r}
+
+field_pos <- team_offense %>%
+  summarize(
+    AvgStart = mean(YardLineFixed, na.rm = TRUE),
+    StartsOppHalf = sum(YardLineFixed >= 50, na.rm = TRUE)
+  )
+
+
+```
+
+
+- Player-level contributions
+
+``` {r}
+
+player_prod <- team_offense %>%
+  filter(IsRush == 1 | IsPass == 1) %>%
+  mutate(Player = gsub(".* ([A-Za-z]+)\\..*", "\\1", Description)) %>%
+  group_by(Player) %>%
+  summarize(
+    Plays = n(),
+    TotalYards = sum(Yards, na.rm = TRUE),
+    Explosives = sum(Yards >= 15, na.rm = TRUE),
+    TDs = sum(IsTouchdown, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(TotalYards))
+
+
+```
+
