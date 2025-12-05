@@ -1034,57 +1034,46 @@ team_wins %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
-*Diving Deeper: Analyzing what makes a team successful* **Find the
-highest scoring teams**
+## Diving Deeper: Analyzing what makes a team successful
 
 - Identify the Top 5 Teams and Filter Data
 
 ``` r
-final_scores
-```
-
-    ## # A tibble: 284 × 5
-    ##        GameId Team1 Score1 Team2 Score2
-    ##         <dbl> <chr>  <int> <chr>  <int>
-    ##  1 2024090500 BAL       20 KC        27
-    ##  2 2024090600 GB        29 PHI       34
-    ##  3 2024090800 ATL       10 PIT       18
-    ##  4 2024090801 BUF       34 ARI       28
-    ##  5 2024090802 CHI       18 TEN       23
-    ##  6 2024090803 NE        16 CIN       10
-    ##  7 2024090804 HOU       29 IND       27
-    ##  8 2024090805 MIA       20 JAX       17
-    ##  9 2024090806 CAR       10 NO        47
-    ## 10 2024090807 MIN       27 NYG        7
-    ## # ℹ 274 more rows
-
-``` r
-team_points <- final_scores %>%
-  # Stack both sides of each game into one long dataset
-  select(GameId, Team = Team1, Points = Score1) %>%
+# Calculate Point Differential
+team_differential <- final_scores %>%
+  # Get Team 1's perspective (Score1 is For, Score2 is Against)
+  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
   bind_rows(
+    # Get Team 2's perspective (Score2 is For, Score1 is Against)
     final_scores %>%
-      select(GameId, Team = Team2, Points = Score2)
+      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
   ) %>%
   group_by(Team) %>%
   summarize(
-    TotalPoints = sum(Points, na.rm = TRUE),
+    TotalPointsFor = sum(PointsFor, na.rm = TRUE),
+    TotalPointsAgainst = sum(PointsAgainst, na.rm = TRUE),
+    PointDiff = TotalPointsFor - TotalPointsAgainst,
     Games = n(),
-    AvgPoints = TotalPoints / Games,
     .groups = "drop"
   ) %>%
-  arrange(desc(TotalPoints))
+  arrange(desc(PointDiff))
 
-# Find top 5 teams by total points
-top_teams <- team_points %>%
-  arrange(desc(TotalPoints)) %>%
+# Find top 5 teams by Point Differential
+top_teams <- team_differential %>%
+  arrange(desc(PointDiff)) %>%
   slice_head(n = 5) %>%
   pull(Team)
 
+print("Top 5 Teams by Point Differential:")
+```
+
+    ## [1] "Top 5 Teams by Point Differential:"
+
+``` r
 print(top_teams)
 ```
 
-    ## [1] "BUF" "DET" "PHI" "WAS" "BAL"
+    ## [1] "PHI" "DET" "BUF" "BAL" "GB"
 
 ``` r
 # Filter games involving ANY of the top 5 teams
@@ -1120,7 +1109,7 @@ team_stats %>%
   coord_flip() +
   labs(
     title = "Offensive Efficiency: Yards Per Play",
-    subtitle = "Comparing the Top 5 Scoring Teams",
+    subtitle = "Top 5 Teams by Point Differential",
     x = "Team",
     y = "Average Yards Per Play"
   ) +
@@ -1150,7 +1139,7 @@ play_tendencies %>%
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "Play-Calling Tendencies",
-    subtitle = "Run vs Pass Split for Top 5 Teams",
+    subtitle = "Run vs Pass Split (Top 5 by Point Diff)",
     x = "Team",
     y = "Percentage of Plays",
     fill = "Play Type"
@@ -1180,7 +1169,7 @@ down_stats %>%
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "3rd Down Success Rate",
-    subtitle = "Percentage of plays gaining positive yards on 3rd down",
+    subtitle = "Top 5 Teams by Point Differential",
     x = "Team",
     y = "Success Rate"
   ) +
@@ -1196,7 +1185,7 @@ down_stats %>%
 field_position_stats <- top_5_offense %>%
   group_by(OffenseTeam) %>%
   summarize(
-    AvgStart = mean(YardLine, na.rm = TRUE), # Assuming YardLine represents distance from own goal
+    AvgStart = mean(YardLine, na.rm = TRUE), 
     .groups = "drop"
   )
 
@@ -1207,6 +1196,7 @@ field_position_stats %>%
   coord_flip() +
   labs(
     title = "Average Starting Field Position",
+    subtitle = "Top 5 Teams by Point Differential",
     x = "Team",
     y = "Yard Line"
   ) +
@@ -1214,3 +1204,35 @@ field_position_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+## Diving Deeper: Analyzing what makes a team unsuccessful
+
+``` r
+# Find bottom 5 teams by Point Differential (Ascending order = most negative first)
+bottom_teams <- team_differential %>%
+  arrange(PointDiff) %>%
+  slice_head(n = 5) %>%
+  pull(Team)
+
+print("Bottom 5 Teams by Point Differential:")
+```
+
+    ## [1] "Bottom 5 Teams by Point Differential:"
+
+``` r
+print(bottom_teams)
+```
+
+    ## [1] "CLE" "CAR" "JAX" "NYG" "NE"
+
+``` r
+# Filter games involving ANY of the bottom 5 teams
+bottom_teams_games <- final_scores %>%
+  filter(Team1 %in% bottom_teams | Team2 %in% bottom_teams) %>%
+  select(GameId, Team1, Team2, Score1, Score2)
+
+# Filter PBP to those games, then filter specifically for when bottom 5 are on OFFENSE
+bottom_5_offense <- pbp %>%
+  semi_join(bottom_teams_games, by = "GameId") %>%
+  filter(OffenseTeam %in% bottom_teams)
+```
