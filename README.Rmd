@@ -726,6 +726,8 @@ team_wins %>%
 *Diving Deeper: Analyzing what makes a team successful*
 **Find the highest scoring teams**
 
+- Identify the Top 5 Teams and Filter Data
+
 ``` {r}
 final_scores
 
@@ -746,130 +748,140 @@ team_points <- final_scores %>%
   ) %>%
   arrange(desc(TotalPoints))
 
-top_team <- team_points$Team[1]
-top_team
+# Find top 5 teams by total points
+top_teams <- team_points %>%
+  arrange(desc(TotalPoints)) %>%
+  slice_head(n = 5) %>%
+  pull(Team)
 
+print(top_teams)
 
-
-```
-
-- Based on the data, Buffalo was the highest scoring team of the 2024 season
-- Get all games involving that team
-
-``` {r}
-
-top_team_games <- final_scores %>%
-  filter(Team1 == top_team | Team2 == top_team) %>%
+# Filter games involving ANY of the top 5 teams
+top_teams_games <- final_scores %>%
+  filter(Team1 %in% top_teams | Team2 %in% top_teams) %>%
   select(GameId, Team1, Team2, Score1, Score2)
 
-```
-
-- Filter play-by-play to just those games
-
-``` {r}
-
-top_team_pbp <- pbp %>%
-  semi_join(top_team_games, by = "GameId")
+# Filter PBP to those games, then filter specifically for when top 5 are on OFFENSE
+top_5_offense <- pbp %>%
+  semi_join(top_teams_games, by = "GameId") %>%
+  filter(OffenseTeam %in% top_teams)
 
 
 ```
 
-- Analyze offensive performance for the highest-scoring team
+- High-Level Offensive Efficiency Chart
 
 ``` {r}
 
-team_offense <- top_team_pbp %>%
-  filter(OffenseTeam == top_team)
-
-
-```
-
-- High-level offensive efficiency
-
-``` {r}
-team_summary <- team_offense %>%
-  group_by(GameId) %>%
+# Summary statistics by Team
+team_stats <- top_5_offense %>%
+  group_by(OffenseTeam) %>%
   summarize(
     Plays = n(),
-    Rushes = sum(IsRush == 1, na.rm = TRUE),
-    Passes = sum(IsPass == 1, na.rm = TRUE),
-    TotalYards = sum(Yards, na.rm = TRUE),
     YPP = mean(Yards, na.rm = TRUE),
     SuccessRate = mean(Yards > 0, na.rm = TRUE),
     Explosives = sum(Yards >= 15, na.rm = TRUE),
     TDs = sum(IsTouchdown == 1, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  arrange(desc(YPP))
-
-
-```
-
-
-- Play-calling tendencies
-
-``` {r}
-
-playcalling <- team_offense %>%
-  summarize(
-    TotalPlays = n(),
-    PassRate = mean(IsPass == 1),
-    RushRate = mean(IsRush == 1),
-    AvgDepth = mean(Yards, na.rm = TRUE),
-    Explosives = sum(Yards >= 15, na.rm = TRUE)
   )
 
-
+# Chart: Yards Per Play Comparison
+team_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = OffenseTeam)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Offensive Efficiency: Yards Per Play",
+    subtitle = "Comparing the Top 5 Scoring Teams",
+    x = "Team",
+    y = "Average Yards Per Play"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 ```
 
-- Down-and-distance efficiency
+- Play-Calling Tendencies Chart
 
 ``` {r}
 
-down_eff <- team_offense %>%
-  filter(Down > 0) %>%
-  group_by(Down) %>%
+# Calculate Run vs Pass rates per team
+play_tendencies <- top_5_offense %>%
+  group_by(OffenseTeam) %>%
   summarize(
     PassRate = mean(IsPass == 1, na.rm = TRUE),
-    YardsPerPlay = mean(Yards, na.rm = TRUE),
+    RushRate = mean(IsRush == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
+
+# Chart: Pass vs Rush Rate
+play_tendencies %>%
+  ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Play-Calling Tendencies",
+    subtitle = "Run vs Pass Split for Top 5 Teams",
+    x = "Team",
+    y = "Percentage of Plays",
+    fill = "Play Type"
+  ) +
+  theme_minimal()
+
+```
+
+- Down Efficiency Chart
+
+``` {r}
+
+# Down Efficiency per team
+down_stats <- top_5_offense %>%
+  filter(Down %in% 1:4) %>%
+  group_by(OffenseTeam, Down) %>%
+  summarize(
     SuccessRate = mean(Yards > 0, na.rm = TRUE),
     .groups = "drop"
   )
 
+# Chart: 3rd Down Success Rate Comparison
+down_stats %>%
+  filter(Down == 3) %>%
+  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "3rd Down Success Rate",
+    subtitle = "Percentage of plays gaining positive yards on 3rd down",
+    x = "Team",
+    y = "Success Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 
 ```
 
-- Field position / starting field
+- Field Position Chart
 
 ``` {r}
-
-field_pos <- team_offense %>%
+field_position_stats <- top_5_offense %>%
+  group_by(OffenseTeam) %>%
   summarize(
-    AvgStart = mean(YardLineFixed, na.rm = TRUE),
-    StartsOppHalf = sum(YardLineFixed >= 50, na.rm = TRUE)
+    AvgStart = mean(YardLine, na.rm = TRUE), # Assuming YardLine represents distance from own goal
+    .groups = "drop"
   )
 
+field_position_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
+  geom_point(size = 4, color = "darkblue") +
+  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "darkblue") +
+  coord_flip() +
+  labs(
+    title = "Average Starting Field Position",
+    x = "Team",
+    y = "Yard Line"
+  ) +
+  theme_minimal()
 
 ```
 
-
-- Player-level contributions
-
-``` {r}
-
-player_prod <- team_offense %>%
-  filter(IsRush == 1 | IsPass == 1) %>%
-  mutate(Player = gsub(".* ([A-Za-z]+)\\..*", "\\1", Description)) %>%
-  group_by(Player) %>%
-  summarize(
-    Plays = n(),
-    TotalYards = sum(Yards, na.rm = TRUE),
-    Explosives = sum(Yards >= 15, na.rm = TRUE),
-    TDs = sum(IsTouchdown, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(TotalYards))
-
-
-```
 
