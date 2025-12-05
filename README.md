@@ -371,7 +371,7 @@ build_scores <- function(data) {
         if_else(DefensiveTwoPoint == 1, 2L, 0L),
       
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-      DefPointsPlay = if_else(IsNoPlay == 1, 0L, DefPointsPlay)
+      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
 
     ) %>%
     ungroup()
@@ -505,24 +505,29 @@ pbp <- pbp %>%
   mutate(
     desc_lower = tolower(Description),
 
-    td_pos  = str_locate(desc_lower, "touchdown")[, 1],
-    rev_pos = str_locate(desc_lower, "reversed")[, 1],
+    td_pos    = str_locate(desc_lower, "touchdown")[, 1],
+    rev_pos   = str_locate(desc_lower, "reversed")[, 1],
+    null_pos  = str_locate(desc_lower, "touchdown nullified")[, 1],
 
     CorrectIsTouchdown = case_when(
+      # Explicit "TOUCHDOWN NULLIFIED ..." → always NOT a TD
+      !is.na(null_pos) ~ 0L,
+      
       # No "touchdown" in text at all
       is.na(td_pos) ~ 0L,
 
-      # "touchdown" present, but no "reversed"
+      # "touchdown" present, but no "reversed" TD stands
       !is.na(td_pos) & is.na(rev_pos) ~ 1L,
 
-      # Both appear, and touchdown comes AFTER reversed TD stands
+      # Both appear, and touchdown comes AFTER "reversed" TD stands
       !is.na(td_pos) & !is.na(rev_pos) & td_pos > rev_pos ~ 1L,
 
-      # Both appear, and touchdown comes BEFORE reversed TD overturned
+      # Both appear, and touchdown comes BEFORE "reversed" TD overturned
       !is.na(td_pos) & !is.na(rev_pos) & td_pos < rev_pos ~ 0L
     )
   ) %>%
-  select(-desc_lower, -td_pos, -rev_pos)  # clean up helpers
+  select(-desc_lower, -td_pos, -rev_pos, -null_pos)
+
 
 pbp %>%
   filter(IsTouchdown != CorrectIsTouchdown) %>%
@@ -530,20 +535,20 @@ pbp %>%
          IsTouchdown, CorrectIsTouchdown, Description)
 ```
 
-    ## # A tibble: 63 × 9
+    ## # A tibble: 137 × 9
     ##        GameId Quarter Minute Second OffenseTeam DefenseTeam IsTouchdown
     ##         <dbl>   <dbl>  <dbl>  <dbl> <chr>       <chr>             <dbl>
     ##  1 2024090500       4      0      5 BAL         KC                    1
-    ##  2 2024090803       2      5     24 CIN         NE                    1
-    ##  3 2024090811       4      1     38 WAS         TB                    1
-    ##  4 2024091600       4      7      9 PHI         ATL                   1
-    ##  5 2024092907       3      7      6 TB          PHI                   1
-    ##  6 2024092907       4      5      2 PHI         TB                    1
-    ##  7 2024093001       2     10     51 SEA         DET                   1
-    ##  8 2024100601       2      2     24 CHI         CAR                   1
-    ##  9 2024100602       1      9     12 BAL         CIN                   1
-    ## 10 2024100604       4      4     49 IND         JAX                   1
-    ## # ℹ 53 more rows
+    ##  2 2024090600       1     12      1 GB          PHI                   1
+    ##  3 2024090801       2     10     35 BUF         ARI                   1
+    ##  4 2024090803       2      5     24 CIN         NE                    1
+    ##  5 2024090806       3     10     42 NO          CAR                   1
+    ##  6 2024090809       3      4     52 SEA         DEN                   1
+    ##  7 2024090811       4      1     38 WAS         TB                    1
+    ##  8 2024090812       4     13     28 LA          DET                   1
+    ##  9 2024090900       2      8     17 SF          NYJ                   1
+    ## 10 2024091502       3      4     33 NO          DAL                   1
+    ## # ℹ 127 more rows
     ## # ℹ 2 more variables: CorrectIsTouchdown <int>, Description <chr>
 
 ``` r
@@ -666,6 +671,32 @@ pbp %>%
     ##  9 WAS                    0 DET                    0 (13:00) (SHOTGUN)…        0
     ## 10 WAS                    0 DET                    0 (12:22) (NO HUDDL…        0
     ## # ℹ 198 more rows
+    ## # ℹ 1 more variable: IsInterception <dbl>
+
+``` r
+#I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
+
+
+#
+pbp %>% 
+  filter( GameId == 2024090809) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+```
+
+    ## # A tibble: 205 × 7
+    ##    OffenseTeam OffenseScore DefenseTeam DefenseScore Description        IsNoPlay
+    ##    <chr>              <int> <chr>              <int> <chr>                 <dbl>
+    ##  1 SEA                    0 DEN                    0 3-W.LUTZ KICKS 66…        0
+    ##  2 SEA                    0 DEN                    0 (14:55) (SHOTGUN)…        0
+    ##  3 SEA                    0 DEN                    0 (14:22) (NO HUDDL…        0
+    ##  4 DEN                    0 SEA                    0 (14:12) 33-J.WILL…        0
+    ##  5 DEN                    0 SEA                    0 (13:27) 33-J.WILL…        0
+    ##  6 DEN                    0 SEA                    0 (12:46) 10-B.NIX …        0
+    ##  7 DEN                    3 SEA                    0 (12:40) 3-W.LUTZ …        0
+    ##  8 SEA                    0 DEN                    3 3-W.LUTZ KICKS 67…        0
+    ##  9 SEA                    0 DEN                    3 TIMEOUT AT 12:36.         0
+    ## 10 SEA                    0 DEN                    3 (12:31) 9-K.WALKE…        0
+    ## # ℹ 195 more rows
     ## # ℹ 1 more variable: IsInterception <dbl>
 
 ``` r
