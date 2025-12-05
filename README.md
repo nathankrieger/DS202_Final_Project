@@ -692,7 +692,7 @@ pbp %>%
 #I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
 
 
-#touchdown nullified issue, added nullification to our istouchdown logic
+#
 pbp %>% 
   filter( GameId == 2024090809) %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
@@ -713,58 +713,6 @@ pbp %>%
     ## 10 SEA                    0 DEN                    3 (12:31) 9-K.WALKE…        0
     ## # ℹ 195 more rows
     ## # ℹ 1 more variable: IsInterception <dbl>
-
-``` r
-#
-pbp %>% 
-  filter( GameId == 2024090810) %>%
-  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
-```
-
-    ## # A tibble: 205 × 7
-    ##    OffenseTeam OffenseScore DefenseTeam DefenseScore Description        IsNoPlay
-    ##    <chr>              <int> <chr>              <int> <chr>                 <dbl>
-    ##  1 DAL                    0 CLE                    0 7-D.HOPKINS KICKS…        0
-    ##  2 DAL                    0 CLE                    0 (14:56) 15-E.ELLI…        1
-    ##  3 DAL                    0 CLE                    0 (14:44) (SHOTGUN)…        0
-    ##  4 DAL                    0 CLE                    0 (14:05) (SHOTGUN)…        0
-    ##  5 DAL                    0 CLE                    0 (13:32) (SHOTGUN)…        0
-    ##  6 DAL                    0 CLE                    0 (12:50) 5-B.ANGER…        0
-    ##  7 CLE                    0 DAL                    0 (12:39) 34-J.FORD…        0
-    ##  8 CLE                    0 DAL                    0 (12:06) (SHOTGUN)…        0
-    ##  9 CLE                    0 DAL                    0 (11:41) (NO HUDDL…        1
-    ## 10 CLE                    0 DAL                    0 (11:25) (SHOTGUN)…        0
-    ## # ℹ 195 more rows
-    ## # ℹ 1 more variable: IsInterception <dbl>
-
-``` r
-#On punt returns, the tram punting the ball is the "offense" this means when there is a punt return and the other team scores on the punt return, the returning team doesn't get the points, the other team does. We need to fix this
-pbp %>%
-  filter(
-    str_detect(tolower(Description), "punt")
-  )
-```
-
-    ## # A tibble: 2,116 × 56
-    ##      GameId GameDate   Quarter Minute Second OffenseTeam DefenseTeam  Down  ToGo
-    ##       <dbl> <date>       <dbl>  <dbl>  <dbl> <chr>       <chr>       <dbl> <dbl>
-    ##  1   2.02e9 2024-09-05       1      3      3 BAL         KC              4     5
-    ##  2   2.02e9 2024-09-05       2     15      0 KC          BAL             4    18
-    ##  3   2.02e9 2024-09-05       3      8     31 BAL         KC              4    11
-    ##  4   2.02e9 2024-09-05       3      3     46 KC          BAL             4     5
-    ##  5   2.02e9 2024-09-05       4      2      0 KC          BAL             4     8
-    ##  6   2.02e9 2024-09-06       1     11     47 GB          PHI             4    11
-    ##  7   2.02e9 2024-09-06       3     10     34 PHI         GB              4    14
-    ##  8   2.02e9 2024-09-06       3      9      9 GB          PHI             4    15
-    ##  9   2.02e9 2024-09-06       3      8     56 GB          PHI             4    15
-    ## 10   2.02e9 2024-09-06       3      7     27 PHI         GB              4     2
-    ## # ℹ 2,106 more rows
-    ## # ℹ 47 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
-    ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
-    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
-    ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
-    ## #   IsTouchdown <int>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
-    ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
 
 ``` r
 # Pass Rate By Down
@@ -1101,108 +1049,112 @@ team_wins %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
-*Diving Deeper: Analyzing what makes a team successful* **Find the
-highest scoring teams**
+``` r
+# Calculate Point Differential for ALL 32 Teams
+all_team_differential <- final_scores %>%
+  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
+  bind_rows(
+    final_scores %>%
+      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
+  ) %>%
+  group_by(Team) %>%
+  summarize(
+    PointDiff = sum(PointsFor, na.rm = TRUE) - sum(PointsAgainst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Create the Chart
+all_team_differential %>%
+  ggplot(aes(x = reorder(Team, PointDiff), y = PointDiff, fill = PointDiff > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("FALSE" = "#D55E00", "TRUE" = "#0072B2"), 
+                    labels = c("Negative", "Positive"), 
+                    name = "Differential") +
+  labs(
+    title = "Total Point Differential by Team",
+    x = "Team",
+    y = "Point Differential"
+  ) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+## Diving Deeper: Analyzing what makes a team successful
 
 - Identify the Top 5 Teams and Filter Data
 
 ``` r
-final_scores
-```
-
-    ## # A tibble: 284 × 5
-    ##        GameId Team1 Score1 Team2 Score2
-    ##         <dbl> <chr>  <int> <chr>  <int>
-    ##  1 2024090500 BAL       20 KC        27
-    ##  2 2024090600 GB        29 PHI       34
-    ##  3 2024090800 ATL       10 PIT       18
-    ##  4 2024090801 BUF       34 ARI       28
-    ##  5 2024090802 CHI       18 TEN       23
-    ##  6 2024090803 NE        16 CIN       10
-    ##  7 2024090804 HOU       29 IND       27
-    ##  8 2024090805 MIA       20 JAX       17
-    ##  9 2024090806 CAR       10 NO        47
-    ## 10 2024090807 MIN       21 NYG       13
-    ## # ℹ 274 more rows
-
-``` r
-team_points <- final_scores %>%
-  # Stack both sides of each game into one long dataset
-  select(GameId, Team = Team1, Points = Score1) %>%
+# --- 1. Calculate Point Differential ---
+team_differential <- final_scores %>%
+  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
   bind_rows(
     final_scores %>%
-      select(GameId, Team = Team2, Points = Score2)
+      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
   ) %>%
   group_by(Team) %>%
   summarize(
-    TotalPoints = sum(Points, na.rm = TRUE),
-    Games = n(),
-    AvgPoints = TotalPoints / Games,
+    PointDiff = sum(PointsFor, na.rm = TRUE) - sum(PointsAgainst, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  arrange(desc(TotalPoints))
+  arrange(desc(PointDiff))
 
-# Find top 5 teams by total points
-top_teams <- team_points %>%
-  arrange(desc(TotalPoints)) %>%
-  slice_head(n = 5) %>%
-  pull(Team)
+# --- 2. Define Top 5 and Bottom 5 Teams ---
+top_teams <- team_differential %>% slice_head(n = 5) %>% pull(Team)
+bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team)
 
-print(top_teams)
-```
-
-    ## [1] "DET" "BUF" "PHI" "BAL" "WAS"
-
-``` r
-# Filter games involving ANY of the top 5 teams
-top_teams_games <- final_scores %>%
-  filter(Team1 %in% top_teams | Team2 %in% top_teams) %>%
-  select(GameId, Team1, Team2, Score1, Score2)
-
-# Filter PBP to those games, then filter specifically for when top 5 are on OFFENSE
+# --- 3. Filter PBP Data ---
+top_games <- final_scores %>% filter(Team1 %in% top_teams | Team2 %in% top_teams)
 top_5_offense <- pbp %>%
-  semi_join(top_teams_games, by = "GameId") %>%
-  filter(OffenseTeam %in% top_teams)
+  semi_join(top_games, by = "GameId") %>%
+  filter(OffenseTeam %in% top_teams) %>%
+  mutate(Group = "Top 5 (Best Diff)")
+
+bottom_games <- final_scores %>% filter(Team1 %in% bottom_teams | Team2 %in% bottom_teams)
+bottom_5_offense <- pbp %>%
+  semi_join(bottom_games, by = "GameId") %>%
+  filter(OffenseTeam %in% bottom_teams) %>%
+  mutate(Group = "Bottom 5 (Worst Diff)")
+
+# --- 4. Combine into one Master Dataset ---
+combined_offense <- bind_rows(top_5_offense, bottom_5_offense) %>%
+  mutate(Group = factor(Group, levels = c("Top 5 (Best Diff)", "Bottom 5 (Worst Diff)")))
 ```
 
-- High-Level Offensive Efficiency Chart
+- Offensive Efficiency Chart
 
 ``` r
-# Summary statistics by Team
-team_stats <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(
-    Plays = n(),
-    YPP = mean(Yards, na.rm = TRUE),
-    SuccessRate = mean(Yards > 0, na.rm = TRUE),
-    Explosives = sum(Yards >= 15, na.rm = TRUE),
-    TDs = sum(IsTouchdown == 1, na.rm = TRUE),
-    .groups = "drop"
-  )
+# Calculate Stats
+efficiency_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
 
-# Chart: Yards Per Play Comparison
-team_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = OffenseTeam)) +
+# Plot
+efficiency_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = Group)) +
   geom_col() +
   coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +  # This creates the side-by-side view
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
   labs(
-    title = "Offensive Efficiency: Yards Per Play",
-    subtitle = "Comparing the Top 5 Scoring Teams",
+    title = "Offensive Efficiency: Top 5 vs Bottom 5",
+    subtitle = "Average Yards Per Play",
     x = "Team",
-    y = "Average Yards Per Play"
+    y = "Yards Per Play"
   ) +
   theme_minimal() +
   theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 - Play-Calling Tendencies Chart
 
 ``` r
-# Calculate Run vs Pass rates per team
-play_tendencies <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
+# Calculate Tendencies
+play_tendencies <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
   summarize(
     PassRate = mean(IsPass == 1, na.rm = TRUE),
     RushRate = mean(IsRush == 1, na.rm = TRUE),
@@ -1210,44 +1162,45 @@ play_tendencies <- top_5_offense %>%
   ) %>%
   pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
 
-# Chart: Pass vs Rush Rate
+# Plot
 play_tendencies %>%
   ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
   geom_col(position = "fill") +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "Play-Calling Tendencies",
-    subtitle = "Run vs Pass Split for Top 5 Teams",
+    subtitle = "Pass (Blue) vs Run (Red) Ratios",
     x = "Team",
-    y = "Percentage of Plays",
+    y = "Percentage",
     fill = "Play Type"
   ) +
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 - Down Efficiency Chart
 
 ``` r
-# Down Efficiency per team
-down_stats <- top_5_offense %>%
-  filter(Down %in% 1:4) %>%
-  group_by(OffenseTeam, Down) %>%
-  summarize(
-    SuccessRate = mean(Yards > 0, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Chart: 3rd Down Success Rate Comparison
-down_stats %>%
+# Calculate 3rd Down Stats
+down_stats <- combined_offense %>%
   filter(Down == 3) %>%
-  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
+  group_by(Group, OffenseTeam) %>%
+  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
+
+# Plot
+down_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = Group)) +
   geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "3rd Down Success Rate",
-    subtitle = "Percentage of plays gaining positive yards on 3rd down",
+    subtitle = "Percentage of plays gaining yards on 3rd down",
     x = "Team",
     y = "Success Rate"
   ) +
@@ -1255,29 +1208,31 @@ down_stats %>%
   theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 - Field Position Chart
 
 ``` r
-field_position_stats <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(
-    AvgStart = mean(YardLine, na.rm = TRUE), # Assuming YardLine represents distance from own goal
-    .groups = "drop"
-  )
+# Calculate Field Position
+field_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
 
-field_position_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
-  geom_point(size = 4, color = "darkblue") +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "darkblue") +
+# Plot
+field_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
   coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
   labs(
     title = "Average Starting Field Position",
     x = "Team",
     y = "Yard Line"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
