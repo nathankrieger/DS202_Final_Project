@@ -230,7 +230,7 @@ build_scores <- function(data) {
         if_else(DefensiveTwoPoint == 1, 2L, 0L),
       
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-      DefPointsPlay = if_else(IsNoPlay == 1, 0L, DefPointsPlay)
+      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
 
     ) %>%
     ungroup()
@@ -318,24 +318,29 @@ pbp <- pbp %>%
   mutate(
     desc_lower = tolower(Description),
 
-    td_pos  = str_locate(desc_lower, "touchdown")[, 1],
-    rev_pos = str_locate(desc_lower, "reversed")[, 1],
+    td_pos    = str_locate(desc_lower, "touchdown")[, 1],
+    rev_pos   = str_locate(desc_lower, "reversed")[, 1],
+    null_pos  = str_locate(desc_lower, "touchdown nullified")[, 1],
 
     CorrectIsTouchdown = case_when(
+      # Explicit "TOUCHDOWN NULLIFIED ..." → always NOT a TD
+      !is.na(null_pos) ~ 0L,
+      
       # No "touchdown" in text at all
       is.na(td_pos) ~ 0L,
 
-      # "touchdown" present, but no "reversed"
+      # "touchdown" present, but no "reversed" TD stands
       !is.na(td_pos) & is.na(rev_pos) ~ 1L,
 
-      # Both appear, and touchdown comes AFTER reversed TD stands
+      # Both appear, and touchdown comes AFTER "reversed" TD stands
       !is.na(td_pos) & !is.na(rev_pos) & td_pos > rev_pos ~ 1L,
 
-      # Both appear, and touchdown comes BEFORE reversed TD overturned
+      # Both appear, and touchdown comes BEFORE "reversed" TD overturned
       !is.na(td_pos) & !is.na(rev_pos) & td_pos < rev_pos ~ 0L
     )
   ) %>%
-  select(-desc_lower, -td_pos, -rev_pos)  # clean up helpers
+  select(-desc_lower, -td_pos, -rev_pos, -null_pos)
+
 
 pbp %>%
   filter(IsTouchdown != CorrectIsTouchdown) %>%
@@ -387,6 +392,13 @@ pbp %>%
 #if a pick 6 happens we are adding points to offence, not defense
 pbp %>% 
   filter( GameId == 2025011801) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+#I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
+
+
+#
+pbp %>% 
+  filter( GameId == 2024090809) %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
 ```
 
