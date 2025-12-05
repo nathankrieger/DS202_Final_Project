@@ -972,6 +972,37 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
+- A chart on team wins
+
+``` r
+# Calculate wins per team from final_scores
+team_wins <- final_scores %>%
+  mutate(
+    Winner = case_when(
+      Score1 > Score2 ~ Team1,
+      Score2 > Score1 ~ Team2,
+      TRUE ~ "Tie"
+    )
+  ) %>%
+  filter(Winner != "Tie") %>%
+  count(Winner, name = "n_wins")
+
+# Create the bar chart
+team_wins %>%
+  ggplot(aes(x = reorder(Winner, n_wins), y = n_wins)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Total Wins by Team",
+    x = "Team",
+    y = "Number of Wins"
+  ) +
+  geom_text(aes(label = n_wins), hjust = -0.2, size = 3) +
+  theme_minimal()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
 *Diving Deeper: Analyzing what makes a team successful* **Find the
 highest scoring teams**
 
