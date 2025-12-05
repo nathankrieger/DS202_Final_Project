@@ -1149,6 +1149,54 @@ efficiency_stats %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
+``` r
+# 1. Calculate Point Differential for ALL teams
+team_differential <- final_scores %>%
+  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
+  bind_rows(
+    final_scores %>%
+      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
+  ) %>%
+  group_by(Team) %>%
+  summarize(
+    PointDiff = sum(PointsFor, na.rm = TRUE) - sum(PointsAgainst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Calculate Yards Per Play (YPP) for ALL teams
+team_ypp <- pbp %>%
+  group_by(OffenseTeam) %>%
+  summarize(
+    YPP = mean(Yards, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 3. Join the data
+team_scatter_data <- team_differential %>%
+  inner_join(team_ypp, by = c("Team" = "OffenseTeam"))
+
+# 4. Create Scatter Plot with Best Fit Line
+team_scatter_data %>%
+  ggplot(aes(x = PointDiff, y = YPP)) +
+  # Add the best fit line (linear model) first so points sit on top
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  # Add points
+  geom_point(color = "steelblue", size = 3) +
+  # Add team labels
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Yards Per Play vs. Point Differential",
+    subtitle = "2024 NFL Regular Season",
+    x = "Point Differential",
+    y = "Yards Per Play (Offense)"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
 - Play-Calling Tendencies Chart
 
 ``` r
@@ -1179,7 +1227,40 @@ play_tendencies %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+``` r
+# 1. Calculate Pass Rate for ALL teams
+team_pass_rate <- pbp %>%
+  group_by(OffenseTeam) %>%
+  summarize(
+    PassRate = mean(IsPass == 1, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Join with Point Differential (Calculated in previous step)
+pass_scatter_data <- team_differential %>%
+  inner_join(team_pass_rate, by = c("Team" = "OffenseTeam"))
+
+# 3. Create Scatter Plot
+pass_scatter_data %>%
+  ggplot(aes(x = PointDiff, y = PassRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Pass Rate vs. Point Differential",
+    subtitle = "Do bad teams pass more because they have to?",
+    x = "Point Differential",
+    y = "Overall Pass Rate"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 - Down Efficiency Chart
 
@@ -1208,7 +1289,42 @@ down_stats %>%
   theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+
+``` r
+# 1. Calculate 3rd Down Conversion Rate for ALL teams
+team_3rd_down <- pbp %>%
+  filter(Down == 3) %>%
+  group_by(OffenseTeam) %>%
+  summarize(
+    # Success = Gaining enough yards for a 1st Down (or TD)
+    ConversionRate = mean(Yards >= ToGo, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Join with Point Differential
+efficiency_scatter_data <- team_differential %>%
+  inner_join(team_3rd_down, by = c("Team" = "OffenseTeam"))
+
+# 3. Create Scatter Plot
+efficiency_scatter_data %>%
+  ggplot(aes(x = PointDiff, y = ConversionRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "purple", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "3rd Down Conversion Rate vs. Point Differential",
+    subtitle = "Better teams sustain drives.",
+    x = "Point Differential",
+    y = "3rd Down Conversion Rate"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 - Field Position Chart
 
@@ -1235,4 +1351,130 @@ field_stats %>%
   theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
+- 4th Quarter Efficiency (Game End Pressure)
+
+``` r
+# --- Metric 2: 4th Quarter YPP ---
+
+# 1. Calculate for ALL Teams
+q4_stats_all <- pbp %>%
+  filter(Quarter == 4) %>%
+  group_by(OffenseTeam) %>%
+  summarize(Q4_YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Join
+q4_scatter_data <- team_differential %>% inner_join(q4_stats_all, by = c("Team" = "OffenseTeam"))
+
+# Scatter Plot
+ggplot(q4_scatter_data, aes(x = PointDiff, y = Q4_YPP)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "purple", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(title = "4th Quarter YPP vs. Point Differential", subtitle = "Offensive performance in the final quarter",
+       x = "Point Differential", y = "4th Quarter Yards/Play") + theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+
+``` r
+# 2. Bar Chart
+combined_offense %>%
+  filter(Quarter == 4) %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(Q4_YPP = mean(Yards, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = reorder(OffenseTeam, Q4_YPP), y = Q4_YPP, fill = Group)) +
+  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  labs(title = "4th Quarter Efficiency (Top 5 vs Bottom 5)", subtitle = "Yards Per Play in Q4",
+       x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-29-2.png)<!-- -->
+
+- “2-Minute Drill” Efficiency (Clock Pressure)
+
+``` r
+# --- Metric 3: 2-Minute Drill Efficiency ---
+
+# 1. Calculate for ALL Teams
+two_min_stats_all <- pbp %>%
+  filter((Quarter == 2), Minute <= 2) %>%
+  group_by(OffenseTeam) %>%
+  summarize(TwoMin_YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Join
+two_min_scatter_data <- team_differential %>% inner_join(two_min_stats_all, by = c("Team" = "OffenseTeam"))
+
+# Scatter Plot
+ggplot(two_min_scatter_data, aes(x = PointDiff, y = TwoMin_YPP)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "orange", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of halves",
+       x = "Point Differential", y = "2-Min Drill Yards/Play") + theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+
+``` r
+# 2. Bar Chart
+combined_offense %>%
+  filter((Quarter == 2), Minute <= 2) %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(TwoMin_YPP = mean(Yards, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = reorder(OffenseTeam, TwoMin_YPP), y = TwoMin_YPP, fill = Group)) +
+  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  labs(title = "2-Minute Drill Efficiency (Top 5 vs Bottom 5)", subtitle = "Yards Per Play (Last 2 mins of Q2/Q4)",
+       x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-30-2.png)<!-- -->
+
+- Explosive Play Rate (Big Play Ability)
+
+``` r
+# --- Metric 4: Explosive Play Rate ---
+
+# 1. Calculate for ALL Teams
+explosive_stats_all <- pbp %>%
+  group_by(OffenseTeam) %>%
+  summarize(ExplosiveRate = mean(Yards >= 20, na.rm = TRUE), .groups = "drop")
+
+# Join
+explosive_scatter_data <- team_differential %>% inner_join(explosive_stats_all, by = c("Team" = "OffenseTeam"))
+
+# 2. Bar Chart
+combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(ExplosiveRate = mean(Yards >= 20, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = reorder(OffenseTeam, ExplosiveRate), y = ExplosiveRate, fill = Group)) +
+  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Explosive Play Rate (Top 5 vs Bottom 5)", subtitle = "% of plays gaining 20+ Yards",
+       x = "Team", y = "Explosive Rate") + theme_minimal() + theme(legend.position = "none")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+``` r
+# Scatter Plot
+ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Explosive Play Rate vs. Point Differential", subtitle = "% of plays gaining 20+ Yards",
+       x = "Point Differential", y = "Explosive Play Rate") + theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
