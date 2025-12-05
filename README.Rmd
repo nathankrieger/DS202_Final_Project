@@ -215,25 +215,40 @@ build_scores <- function(data) {
     group_by(GameId) %>%
     mutate(
       PlayIndex = row_number(),
-
-      # Offensive points on this play
+      
+      desc_lower = tolower(Description),
+      
+      # Identify punt-return touchdowns:
+      #    - PlayType == "PUNT" (adjust if your column is different)
+      #    - Touchdown on that play
+      is_punt_td = (PlayType == "PUNT" | str_detect(desc_lower, " punt")) &
+                   IsTouchdown == 1,
+      
+      # Offensive TDs = all TDs that are NOT punt-return TDs
+      OffTDPoints = if_else(IsTouchdown == 1 & !is_punt_td, 6L, 0L),
+      
+      # Defensive TDs = punt-return TDs
+      DefTDPoints = if_else(is_punt_td, 6L, 0L),
+      
+      # Base offensive scoring (non-TD parts still go to offense)
       OffPointsPlay =
-        if_else(IsTouchdown == 1 & IsInterception == 0, 6L, 0L) +
+        OffTDPoints +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
-
-      # Defensive points on this play
+      
+      # Base defensive scoring (safeties, defensive 2-pt returns, punt TDs)
       DefPointsPlay =
-        if_else(IsTouchdown == 1 & IsInterception == 1, 6L, 0L) +
         if_else(IsSafety == 1, 2L, 0L) +
-        if_else(DefensiveTwoPoint == 1, 2L, 0L),
+        if_else(DefensiveTwoPoint == 1, 2L, 0L) +
+        DefTDPoints,
       
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
 
+      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
     ) %>%
-    ungroup()
+    ungroup() %>%
+    select(-desc_lower, -is_punt_td, -OffTDPoints, -DefTDPoints)
   
   # 2) Long-format team scoring table
   team_scores_long <- data_scored %>%
@@ -396,10 +411,19 @@ pbp %>%
 #I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
 
 
-#
+#touchdown nullified issue, added nullification to our istouchdown logic
 pbp %>% 
   filter( GameId == 2024090809) %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+#
+pbp %>% 
+  filter( GameId == 2024090810) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+#On punt returns, the tram punting the ball is the "offense" this means when there is a punt return and the other team scores on the punt return, the returning team doesn't get the points, the other team does. We need to fix this
+pbp %>%
+  filter(
+    str_detect(tolower(Description), "punt")
+  )
 ```
 
 ``` {r}
@@ -734,81 +758,54 @@ team_wins %>%
 
 ```
 
-``` {r}
 
-# Calculate Point Differential for ALL 32 Teams
-all_team_differential <- final_scores %>%
-  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
-  bind_rows(
-    final_scores %>%
-      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
-  ) %>%
-  group_by(Team) %>%
-  summarize(
-    PointDiff = sum(PointsFor, na.rm = TRUE) - sum(PointsAgainst, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Create the Chart
-all_team_differential %>%
-  ggplot(aes(x = reorder(Team, PointDiff), y = PointDiff, fill = PointDiff > 0)) +
-  geom_col() +
-  coord_flip() +
-  scale_fill_manual(values = c("FALSE" = "#D55E00", "TRUE" = "#0072B2"), 
-                    labels = c("Negative", "Positive"), 
-                    name = "Differential") +
-  labs(
-    title = "Total Point Differential by Team",
-    x = "Team",
-    y = "Point Differential"
-  ) +
-  theme_minimal()
-
-
-```
-
-
-## Diving Deeper: Analyzing what makes a team successful
+*Diving Deeper: Analyzing what makes a team successful*
+**Find the highest scoring teams**
 
 - Identify the Top 5 Teams and Filter Data
 
 ``` {r}
+final_scores
 
-# --- 1. Calculate Point Differential ---
-team_differential <- final_scores %>%
-  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
+
+team_points <- final_scores %>%
+  # Stack both sides of each game into one long dataset
+  select(GameId, Team = Team1, Points = Score1) %>%
   bind_rows(
     final_scores %>%
-      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
+      select(GameId, Team = Team2, Points = Score2)
   ) %>%
   group_by(Team) %>%
   summarize(
-    PointDiff = sum(PointsFor, na.rm = TRUE) - sum(PointsAgainst, na.rm = TRUE),
+    TotalPoints = sum(Points, na.rm = TRUE),
+    Games = n(),
+    AvgPoints = TotalPoints / Games,
     .groups = "drop"
   ) %>%
-  arrange(desc(PointDiff))
+  arrange(desc(TotalPoints))
 
-# --- 2. Define Top 5 and Bottom 5 Teams ---
-top_teams <- team_differential %>% slice_head(n = 5) %>% pull(Team)
-bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team) # slice_tail gets the bottom rows
+# Find top 5 teams by total points
+top_teams <- team_points %>%
+  arrange(desc(TotalPoints)) %>%
+  slice_head(n = 5) %>%
+  pull(Team)
 
-# --- 3. Create Datasets for Analysis ---
+print(top_teams)
 
-# Top 5 Data
-top_games <- final_scores %>% filter(Team1 %in% top_teams | Team2 %in% top_teams)
+# Filter games involving ANY of the top 5 teams
+top_teams_games <- final_scores %>%
+  filter(Team1 %in% top_teams | Team2 %in% top_teams) %>%
+  select(GameId, Team1, Team2, Score1, Score2)
+
+# Filter PBP to those games, then filter specifically for when top 5 are on OFFENSE
 top_5_offense <- pbp %>%
-  semi_join(top_games, by = "GameId") %>%
+  semi_join(top_teams_games, by = "GameId") %>%
   filter(OffenseTeam %in% top_teams)
 
-# Bottom 5 Data
-bottom_games <- final_scores %>% filter(Team1 %in% bottom_teams | Team2 %in% bottom_teams)
-bottom_5_offense <- pbp %>%
-  semi_join(bottom_games, by = "GameId") %>%
-  filter(OffenseTeam %in% bottom_teams)
 
 ```
 
-- Offensive Efficiency Chart
+- High-Level Offensive Efficiency Chart
 
 ``` {r}
 
@@ -831,67 +828,40 @@ team_stats %>%
   coord_flip() +
   labs(
     title = "Offensive Efficiency: Yards Per Play",
-    subtitle = "Top 5 Teams by Point Differential",
+    subtitle = "Comparing the Top 5 Scoring Teams",
     x = "Team",
     y = "Average Yards Per Play"
   ) +
   theme_minimal() +
   theme(legend.position = "none")
-
-```
-
-``` {r}
-
-# Bottom 5 Stats
-bottom_stats <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
-
-# Bottom 5 Chart
-bottom_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = OffenseTeam)) +
-  geom_col() + coord_flip() +
-  labs(title = "Offensive Efficiency: Yards Per Play", subtitle = "Bottom 5 Teams by Point Differential",
-       x = "Team", y = "Average Yards Per Play") +
-  theme_minimal() + theme(legend.position = "none")
-
 ```
 
 - Play-Calling Tendencies Chart
 
 ``` {r}
 
-# Top 5 Tendencies
-top_tendencies <- top_5_offense %>%
+# Calculate Run vs Pass rates per team
+play_tendencies <- top_5_offense %>%
   group_by(OffenseTeam) %>%
-  summarize(PassRate = mean(IsPass == 1, na.rm = TRUE),
-            RushRate = mean(IsRush == 1, na.rm = TRUE), .groups = "drop") %>%
+  summarize(
+    PassRate = mean(IsPass == 1, na.rm = TRUE),
+    RushRate = mean(IsRush == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
 
-# Top 5 Chart
-top_tendencies %>%
+# Chart: Pass vs Rush Rate
+play_tendencies %>%
   ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
-  geom_col(position = "fill") + scale_y_continuous(labels = scales::percent) +
-  labs(title = "Play-Calling Tendencies", subtitle = "Top 5 Teams",
-       x = "Team", y = "Percentage", fill = "Type") +
-  theme_minimal()
-
-```
-``` {r}
-
-# Bottom 5 Tendencies
-bottom_tendencies <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(PassRate = mean(IsPass == 1, na.rm = TRUE),
-            RushRate = mean(IsRush == 1, na.rm = TRUE), .groups = "drop") %>%
-  pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
-
-# Bottom 5 Chart
-bottom_tendencies %>%
-  ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
-  geom_col(position = "fill") + scale_y_continuous(labels = scales::percent) +
-  labs(title = "Play-Calling Tendencies", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Percentage", fill = "Type") +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Play-Calling Tendencies",
+    subtitle = "Run vs Pass Split for Top 5 Teams",
+    x = "Team",
+    y = "Percentage of Plays",
+    fill = "Play Type"
+  ) +
   theme_minimal()
 
 ```
@@ -900,75 +870,54 @@ bottom_tendencies %>%
 
 ``` {r}
 
-# Top 5 Down Stats
-top_down_stats <- top_5_offense %>%
+# Down Efficiency per team
+down_stats <- top_5_offense %>%
+  filter(Down %in% 1:4) %>%
+  group_by(OffenseTeam, Down) %>%
+  summarize(
+    SuccessRate = mean(Yards > 0, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Chart: 3rd Down Success Rate Comparison
+down_stats %>%
   filter(Down == 3) %>%
-  group_by(OffenseTeam) %>%
-  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
-
-# Top 5 Chart
-top_down_stats %>%
   ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
-  geom_col() + scale_y_continuous(labels = scales::percent) +
-  labs(title = "3rd Down Success Rate", subtitle = "Top 5 Teams",
-       x = "Team", y = "Success Rate") +
-  theme_minimal() + theme(legend.position = "none")
-```
-
-``` {r}
-
-# Bottom 5 Down Stats
-bottom_down_stats <- bottom_5_offense %>%
-  filter(Down == 3) %>%
-  group_by(OffenseTeam) %>%
-  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
-
-# Bottom 5 Chart
-bottom_down_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
-  geom_col() + scale_y_continuous(labels = scales::percent) +
-  labs(title = "3rd Down Success Rate", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Success Rate") +
-  theme_minimal() + theme(legend.position = "none")
+  geom_col() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "3rd Down Success Rate",
+    subtitle = "Percentage of plays gaining positive yards on 3rd down",
+    x = "Team",
+    y = "Success Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 
 ```
 
 - Field Position Chart
 
 ``` {r}
-
-# Top 5 Field Pos
-top_field <- top_5_offense %>%
+field_position_stats <- top_5_offense %>%
   group_by(OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
+  summarize(
+    AvgStart = mean(YardLine, na.rm = TRUE), # Assuming YardLine represents distance from own goal
+    .groups = "drop"
+  )
 
-# Top 5 Chart
-top_field %>%
+field_position_stats %>%
   ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
   geom_point(size = 4, color = "darkblue") +
   geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "darkblue") +
   coord_flip() +
-  labs(title = "Average Starting Field Position", subtitle = "Top 5 Teams",
-       x = "Team", y = "Yard Line") +
+  labs(
+    title = "Average Starting Field Position",
+    x = "Team",
+    y = "Yard Line"
+  ) +
   theme_minimal()
 
 ```
 
-``` {r}
-
-# Bottom 5 Field Pos
-bottom_field <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
-
-# Bottom 5 Chart
-bottom_field %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
-  geom_point(size = 4, color = "firebrick") +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "firebrick") +
-  coord_flip() +
-  labs(title = "Average Starting Field Position", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Yard Line") +
-  theme_minimal()
-```
 

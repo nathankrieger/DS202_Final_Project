@@ -356,25 +356,40 @@ build_scores <- function(data) {
     group_by(GameId) %>%
     mutate(
       PlayIndex = row_number(),
-
-      # Offensive points on this play
+      
+      desc_lower = tolower(Description),
+      
+      # Identify punt-return touchdowns:
+      #    - PlayType == "PUNT" (adjust if your column is different)
+      #    - Touchdown on that play
+      is_punt_td = (PlayType == "PUNT" | str_detect(desc_lower, " punt")) &
+                   IsTouchdown == 1,
+      
+      # Offensive TDs = all TDs that are NOT punt-return TDs
+      OffTDPoints = if_else(IsTouchdown == 1 & !is_punt_td, 6L, 0L),
+      
+      # Defensive TDs = punt-return TDs
+      DefTDPoints = if_else(is_punt_td, 6L, 0L),
+      
+      # Base offensive scoring (non-TD parts still go to offense)
       OffPointsPlay =
-        if_else(IsTouchdown == 1 & IsInterception == 0, 6L, 0L) +
+        OffTDPoints +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
-
-      # Defensive points on this play
+      
+      # Base defensive scoring (safeties, defensive 2-pt returns, punt TDs)
       DefPointsPlay =
-        if_else(IsTouchdown == 1 & IsInterception == 1, 6L, 0L) +
         if_else(IsSafety == 1, 2L, 0L) +
-        if_else(DefensiveTwoPoint == 1, 2L, 0L),
+        if_else(DefensiveTwoPoint == 1, 2L, 0L) +
+        DefTDPoints,
       
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
 
+      DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
     ) %>%
-    ungroup()
+    ungroup() %>%
+    select(-desc_lower, -is_punt_td, -OffTDPoints, -DefTDPoints)
   
   # 2) Long-format team scoring table
   team_scores_long <- data_scored %>%
@@ -622,7 +637,7 @@ final_scores
     ##  7 2024090804 HOU       29 IND       27
     ##  8 2024090805 MIA       20 JAX       17
     ##  9 2024090806 CAR       10 NO        47
-    ## 10 2024090807 MIN       27 NYG        7
+    ## 10 2024090807 MIN       21 NYG       13
     ## # ℹ 274 more rows
 
 ``` r
@@ -677,7 +692,7 @@ pbp %>%
 #I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
 
 
-#
+#touchdown nullified issue, added nullification to our istouchdown logic
 pbp %>% 
   filter( GameId == 2024090809) %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
@@ -698,6 +713,58 @@ pbp %>%
     ## 10 SEA                    0 DEN                    3 (12:31) 9-K.WALKE…        0
     ## # ℹ 195 more rows
     ## # ℹ 1 more variable: IsInterception <dbl>
+
+``` r
+#
+pbp %>% 
+  filter( GameId == 2024090810) %>%
+  select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
+```
+
+    ## # A tibble: 205 × 7
+    ##    OffenseTeam OffenseScore DefenseTeam DefenseScore Description        IsNoPlay
+    ##    <chr>              <int> <chr>              <int> <chr>                 <dbl>
+    ##  1 DAL                    0 CLE                    0 7-D.HOPKINS KICKS…        0
+    ##  2 DAL                    0 CLE                    0 (14:56) 15-E.ELLI…        1
+    ##  3 DAL                    0 CLE                    0 (14:44) (SHOTGUN)…        0
+    ##  4 DAL                    0 CLE                    0 (14:05) (SHOTGUN)…        0
+    ##  5 DAL                    0 CLE                    0 (13:32) (SHOTGUN)…        0
+    ##  6 DAL                    0 CLE                    0 (12:50) 5-B.ANGER…        0
+    ##  7 CLE                    0 DAL                    0 (12:39) 34-J.FORD…        0
+    ##  8 CLE                    0 DAL                    0 (12:06) (SHOTGUN)…        0
+    ##  9 CLE                    0 DAL                    0 (11:41) (NO HUDDL…        1
+    ## 10 CLE                    0 DAL                    0 (11:25) (SHOTGUN)…        0
+    ## # ℹ 195 more rows
+    ## # ℹ 1 more variable: IsInterception <dbl>
+
+``` r
+#On punt returns, the tram punting the ball is the "offense" this means when there is a punt return and the other team scores on the punt return, the returning team doesn't get the points, the other team does. We need to fix this
+pbp %>%
+  filter(
+    str_detect(tolower(Description), "punt")
+  )
+```
+
+    ## # A tibble: 2,116 × 56
+    ##      GameId GameDate   Quarter Minute Second OffenseTeam DefenseTeam  Down  ToGo
+    ##       <dbl> <date>       <dbl>  <dbl>  <dbl> <chr>       <chr>       <dbl> <dbl>
+    ##  1   2.02e9 2024-09-05       1      3      3 BAL         KC              4     5
+    ##  2   2.02e9 2024-09-05       2     15      0 KC          BAL             4    18
+    ##  3   2.02e9 2024-09-05       3      8     31 BAL         KC              4    11
+    ##  4   2.02e9 2024-09-05       3      3     46 KC          BAL             4     5
+    ##  5   2.02e9 2024-09-05       4      2      0 KC          BAL             4     8
+    ##  6   2.02e9 2024-09-06       1     11     47 GB          PHI             4    11
+    ##  7   2.02e9 2024-09-06       3     10     34 PHI         GB              4    14
+    ##  8   2.02e9 2024-09-06       3      9      9 GB          PHI             4    15
+    ##  9   2.02e9 2024-09-06       3      8     56 GB          PHI             4    15
+    ## 10   2.02e9 2024-09-06       3      7     27 PHI         GB              4     2
+    ## # ℹ 2,106 more rows
+    ## # ℹ 47 more variables: YardLine <dbl>, ...11 <lgl>, SeriesFirstDown <dbl>,
+    ## #   ...13 <lgl>, NextScore <dbl>, Description <chr>, TeamWin <dbl>,
+    ## #   ...17 <lgl>, ...18 <lgl>, SeasonYear <dbl>, Yards <dbl>, Formation <fct>,
+    ## #   PlayType <fct>, IsRush <dbl>, IsPass <dbl>, IsIncomplete <dbl>,
+    ## #   IsTouchdown <int>, PassType <fct>, IsSack <dbl>, IsChallenge <dbl>,
+    ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
 
 ``` r
 # Pass Rate By Down
@@ -1034,46 +1101,57 @@ team_wins %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
-## Diving Deeper: Analyzing what makes a team successful
+*Diving Deeper: Analyzing what makes a team successful* **Find the
+highest scoring teams**
 
 - Identify the Top 5 Teams and Filter Data
 
 ``` r
-# Calculate Point Differential
-team_differential <- final_scores %>%
-  # Get Team 1's perspective (Score1 is For, Score2 is Against)
-  select(GameId, Team = Team1, PointsFor = Score1, PointsAgainst = Score2) %>%
+final_scores
+```
+
+    ## # A tibble: 284 × 5
+    ##        GameId Team1 Score1 Team2 Score2
+    ##         <dbl> <chr>  <int> <chr>  <int>
+    ##  1 2024090500 BAL       20 KC        27
+    ##  2 2024090600 GB        29 PHI       34
+    ##  3 2024090800 ATL       10 PIT       18
+    ##  4 2024090801 BUF       34 ARI       28
+    ##  5 2024090802 CHI       18 TEN       23
+    ##  6 2024090803 NE        16 CIN       10
+    ##  7 2024090804 HOU       29 IND       27
+    ##  8 2024090805 MIA       20 JAX       17
+    ##  9 2024090806 CAR       10 NO        47
+    ## 10 2024090807 MIN       21 NYG       13
+    ## # ℹ 274 more rows
+
+``` r
+team_points <- final_scores %>%
+  # Stack both sides of each game into one long dataset
+  select(GameId, Team = Team1, Points = Score1) %>%
   bind_rows(
-    # Get Team 2's perspective (Score2 is For, Score1 is Against)
     final_scores %>%
-      select(GameId, Team = Team2, PointsFor = Score2, PointsAgainst = Score1)
+      select(GameId, Team = Team2, Points = Score2)
   ) %>%
   group_by(Team) %>%
   summarize(
-    TotalPointsFor = sum(PointsFor, na.rm = TRUE),
-    TotalPointsAgainst = sum(PointsAgainst, na.rm = TRUE),
-    PointDiff = TotalPointsFor - TotalPointsAgainst,
+    TotalPoints = sum(Points, na.rm = TRUE),
     Games = n(),
+    AvgPoints = TotalPoints / Games,
     .groups = "drop"
   ) %>%
-  arrange(desc(PointDiff))
+  arrange(desc(TotalPoints))
 
-# Find top 5 teams by Point Differential
-top_teams <- team_differential %>%
-  arrange(desc(PointDiff)) %>%
+# Find top 5 teams by total points
+top_teams <- team_points %>%
+  arrange(desc(TotalPoints)) %>%
   slice_head(n = 5) %>%
   pull(Team)
 
-print("Top 5 Teams by Point Differential:")
-```
-
-    ## [1] "Top 5 Teams by Point Differential:"
-
-``` r
 print(top_teams)
 ```
 
-    ## [1] "PHI" "DET" "BUF" "BAL" "GB"
+    ## [1] "DET" "BUF" "PHI" "BAL" "WAS"
 
 ``` r
 # Filter games involving ANY of the top 5 teams
@@ -1109,7 +1187,7 @@ team_stats %>%
   coord_flip() +
   labs(
     title = "Offensive Efficiency: Yards Per Play",
-    subtitle = "Top 5 Teams by Point Differential",
+    subtitle = "Comparing the Top 5 Scoring Teams",
     x = "Team",
     y = "Average Yards Per Play"
   ) +
@@ -1139,7 +1217,7 @@ play_tendencies %>%
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "Play-Calling Tendencies",
-    subtitle = "Run vs Pass Split (Top 5 by Point Diff)",
+    subtitle = "Run vs Pass Split for Top 5 Teams",
     x = "Team",
     y = "Percentage of Plays",
     fill = "Play Type"
@@ -1169,7 +1247,7 @@ down_stats %>%
   scale_y_continuous(labels = scales::percent) +
   labs(
     title = "3rd Down Success Rate",
-    subtitle = "Top 5 Teams by Point Differential",
+    subtitle = "Percentage of plays gaining positive yards on 3rd down",
     x = "Team",
     y = "Success Rate"
   ) +
@@ -1185,7 +1263,7 @@ down_stats %>%
 field_position_stats <- top_5_offense %>%
   group_by(OffenseTeam) %>%
   summarize(
-    AvgStart = mean(YardLine, na.rm = TRUE), 
+    AvgStart = mean(YardLine, na.rm = TRUE), # Assuming YardLine represents distance from own goal
     .groups = "drop"
   )
 
@@ -1196,7 +1274,6 @@ field_position_stats %>%
   coord_flip() +
   labs(
     title = "Average Starting Field Position",
-    subtitle = "Top 5 Teams by Point Differential",
     x = "Team",
     y = "Yard Line"
   ) +
@@ -1204,35 +1281,3 @@ field_position_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
-
-## Diving Deeper: Analyzing what makes a team unsuccessful
-
-``` r
-# Find bottom 5 teams by Point Differential (Ascending order = most negative first)
-bottom_teams <- team_differential %>%
-  arrange(PointDiff) %>%
-  slice_head(n = 5) %>%
-  pull(Team)
-
-print("Bottom 5 Teams by Point Differential:")
-```
-
-    ## [1] "Bottom 5 Teams by Point Differential:"
-
-``` r
-print(bottom_teams)
-```
-
-    ## [1] "CLE" "CAR" "JAX" "NYG" "NE"
-
-``` r
-# Filter games involving ANY of the bottom 5 teams
-bottom_teams_games <- final_scores %>%
-  filter(Team1 %in% bottom_teams | Team2 %in% bottom_teams) %>%
-  select(GameId, Team1, Team2, Score1, Score2)
-
-# Filter PBP to those games, then filter specifically for when bottom 5 are on OFFENSE
-bottom_5_offense <- pbp %>%
-  semi_join(bottom_teams_games, by = "GameId") %>%
-  filter(OffenseTeam %in% bottom_teams)
-```
