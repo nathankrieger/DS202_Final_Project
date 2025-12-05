@@ -790,21 +790,24 @@ team_differential <- final_scores %>%
 
 # --- 2. Define Top 5 and Bottom 5 Teams ---
 top_teams <- team_differential %>% slice_head(n = 5) %>% pull(Team)
-bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team) # slice_tail gets the bottom rows
+bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team)
 
-# --- 3. Create Datasets for Analysis ---
-
-# Top 5 Data
+# --- 3. Filter PBP Data ---
 top_games <- final_scores %>% filter(Team1 %in% top_teams | Team2 %in% top_teams)
 top_5_offense <- pbp %>%
   semi_join(top_games, by = "GameId") %>%
-  filter(OffenseTeam %in% top_teams)
+  filter(OffenseTeam %in% top_teams) %>%
+  mutate(Group = "Top 5 (Best Diff)")
 
-# Bottom 5 Data
 bottom_games <- final_scores %>% filter(Team1 %in% bottom_teams | Team2 %in% bottom_teams)
 bottom_5_offense <- pbp %>%
   semi_join(bottom_games, by = "GameId") %>%
-  filter(OffenseTeam %in% bottom_teams)
+  filter(OffenseTeam %in% bottom_teams) %>%
+  mutate(Group = "Bottom 5 (Worst Diff)")
+
+# --- 4. Combine into one Master Dataset ---
+combined_offense <- bind_rows(top_5_offense, bottom_5_offense) %>%
+  mutate(Group = factor(Group, levels = c("Top 5 (Best Diff)", "Bottom 5 (Worst Diff)")))
 
 ```
 
@@ -812,86 +815,58 @@ bottom_5_offense <- pbp %>%
 
 ``` {r}
 
-# Summary statistics by Team
-team_stats <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(
-    Plays = n(),
-    YPP = mean(Yards, na.rm = TRUE),
-    SuccessRate = mean(Yards > 0, na.rm = TRUE),
-    Explosives = sum(Yards >= 15, na.rm = TRUE),
-    TDs = sum(IsTouchdown == 1, na.rm = TRUE),
-    .groups = "drop"
-  )
+# Calculate Stats
+efficiency_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
 
-# Chart: Yards Per Play Comparison
-team_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = OffenseTeam)) +
+# Plot
+efficiency_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = Group)) +
   geom_col() +
   coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +  # This creates the side-by-side view
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
   labs(
-    title = "Offensive Efficiency: Yards Per Play",
-    subtitle = "Top 5 Teams by Point Differential",
+    title = "Offensive Efficiency: Top 5 vs Bottom 5",
+    subtitle = "Average Yards Per Play",
     x = "Team",
-    y = "Average Yards Per Play"
+    y = "Yards Per Play"
   ) +
   theme_minimal() +
   theme(legend.position = "none")
 
 ```
 
-``` {r}
-
-# Bottom 5 Stats
-bottom_stats <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
-
-# Bottom 5 Chart
-bottom_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = OffenseTeam)) +
-  geom_col() + coord_flip() +
-  labs(title = "Offensive Efficiency: Yards Per Play", subtitle = "Bottom 5 Teams by Point Differential",
-       x = "Team", y = "Average Yards Per Play") +
-  theme_minimal() + theme(legend.position = "none")
-
-```
 
 - Play-Calling Tendencies Chart
 
 ``` {r}
 
-# Top 5 Tendencies
-top_tendencies <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(PassRate = mean(IsPass == 1, na.rm = TRUE),
-            RushRate = mean(IsRush == 1, na.rm = TRUE), .groups = "drop") %>%
+# Calculate Tendencies
+play_tendencies <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(
+    PassRate = mean(IsPass == 1, na.rm = TRUE),
+    RushRate = mean(IsRush == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
 
-# Top 5 Chart
-top_tendencies %>%
+# Plot
+play_tendencies %>%
   ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
-  geom_col(position = "fill") + scale_y_continuous(labels = scales::percent) +
-  labs(title = "Play-Calling Tendencies", subtitle = "Top 5 Teams",
-       x = "Team", y = "Percentage", fill = "Type") +
-  theme_minimal()
-
-```
-``` {r}
-
-# Bottom 5 Tendencies
-bottom_tendencies <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(PassRate = mean(IsPass == 1, na.rm = TRUE),
-            RushRate = mean(IsRush == 1, na.rm = TRUE), .groups = "drop") %>%
-  pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
-
-# Bottom 5 Chart
-bottom_tendencies %>%
-  ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
-  geom_col(position = "fill") + scale_y_continuous(labels = scales::percent) +
-  labs(title = "Play-Calling Tendencies", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Percentage", fill = "Type") +
+  geom_col(position = "fill") +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Play-Calling Tendencies",
+    subtitle = "Pass (Blue) vs Run (Red) Ratios",
+    x = "Team",
+    y = "Percentage",
+    fill = "Play Type"
+  ) +
   theme_minimal()
 
 ```
@@ -900,75 +875,59 @@ bottom_tendencies %>%
 
 ``` {r}
 
-# Top 5 Down Stats
-top_down_stats <- top_5_offense %>%
+# Calculate 3rd Down Stats
+down_stats <- combined_offense %>%
   filter(Down == 3) %>%
-  group_by(OffenseTeam) %>%
+  group_by(Group, OffenseTeam) %>%
   summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
 
-# Top 5 Chart
-top_down_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
-  geom_col() + scale_y_continuous(labels = scales::percent) +
-  labs(title = "3rd Down Success Rate", subtitle = "Top 5 Teams",
-       x = "Team", y = "Success Rate") +
-  theme_minimal() + theme(legend.position = "none")
+# Plot
+down_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = Group)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "3rd Down Success Rate",
+    subtitle = "Percentage of plays gaining yards on 3rd down",
+    x = "Team",
+    y = "Success Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 ```
 
-``` {r}
 
-# Bottom 5 Down Stats
-bottom_down_stats <- bottom_5_offense %>%
-  filter(Down == 3) %>%
-  group_by(OffenseTeam) %>%
-  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
-
-# Bottom 5 Chart
-bottom_down_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = OffenseTeam)) +
-  geom_col() + scale_y_continuous(labels = scales::percent) +
-  labs(title = "3rd Down Success Rate", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Success Rate") +
-  theme_minimal() + theme(legend.position = "none")
-
-```
 
 - Field Position Chart
 
-``` {r}
-
-# Top 5 Field Pos
-top_field <- top_5_offense %>%
-  group_by(OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
-
-# Top 5 Chart
-top_field %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
-  geom_point(size = 4, color = "darkblue") +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "darkblue") +
-  coord_flip() +
-  labs(title = "Average Starting Field Position", subtitle = "Top 5 Teams",
-       x = "Team", y = "Yard Line") +
-  theme_minimal()
-
-```
 
 ``` {r}
 
-# Bottom 5 Field Pos
-bottom_field <- bottom_5_offense %>%
-  group_by(OffenseTeam) %>%
+# Calculate Field Position
+field_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
   summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
 
-# Bottom 5 Chart
-bottom_field %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart)) +
-  geom_point(size = 4, color = "firebrick") +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart), color = "firebrick") +
+# Plot
+field_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
   coord_flip() +
-  labs(title = "Average Starting Field Position", subtitle = "Bottom 5 Teams",
-       x = "Team", y = "Yard Line") +
-  theme_minimal()
+  facet_wrap(~Group, scales = "free_y") +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
+  labs(
+    title = "Average Starting Field Position",
+    x = "Team",
+    y = "Yard Line"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
 ```
+
+
 
