@@ -51,7 +51,7 @@ pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
 Our analysis uses play-by-play data from the 2024 NFL season sourced
 from NFLsavant.com, a publicly accessible resource containing detailed
 information for every offensive snap. The dataset includes 45 variables.
-The relavent variables are:
+The relevant variables are:
 
 GameId: The ID of the current game.
 
@@ -769,7 +769,7 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
-- this table shows how often the league is passing based off of what
+- This table shows how often the league is passing based off of what
   down it is. We can see that on 3rd down teams are most likely to pass
   the ball because they need the most yards at this point of the drive.
 
@@ -1234,7 +1234,9 @@ efficiency_stats %>%
   theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- --> - This chart
+demonstrates the difference between good and bad teams. We can see that
+the top 5 teams are much more efficient on offense.
 
 ``` r
 # 1. Calculate Point Differential for ALL teams
@@ -1291,6 +1293,8 @@ print(paste("Correlation (r):", round(r_value, 4)))
 
     ## [1] "Correlation (r): 0.6384"
 
+- Scatterplot version of the barchart, accounting for the entire league.
+
 - Play-Calling Tendencies Chart
 
 ``` r
@@ -1322,6 +1326,11 @@ play_tendencies %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+- This barchart is a strong indicator of the disfunctions of a bad team.
+  Bad teams do not run the ball nearly as much as good teams. Without an
+  effective run game, the defense only needs to defend passing plays,
+  making them even more effective against bad teams.
 
 ``` r
 # 1. Calculate Pass Rate for ALL teams
@@ -1364,6 +1373,8 @@ pass_scatter_data %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
+- Scatterplot version of the barchart, accounting for the entire league.
+
 - Down Efficiency Chart
 
 ``` r
@@ -1392,6 +1403,11 @@ down_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+
+- Based on these charts, 3rd down success rate is a huge indicator of
+  what makes a team good. Teams towards the bottom in point differential
+  do not preform well under pressure. New England’s 3rd down success
+  rate is less than 50%.
 
 ``` r
 # 1. Calculate 3rd Down Conversion Rate for ALL teams
@@ -1435,6 +1451,8 @@ print(paste("Correlation (r):", round(r_val_3rd, 4)))
 
     ## [1] "Correlation (r): 0.7406"
 
+- Scatterplot version of the barchart, accounting for the entire league.
+
 - 4th Quarter Efficiency (Game End Pressure)
 
 ``` r
@@ -1449,6 +1467,13 @@ q4_stats_all <- pbp %>%
 # Join
 q4_scatter_data <- team_differential %>% inner_join(q4_stats_all, by = c("Team" = "OffenseTeam"))
 
+r_val_q4 <- cor(q4_scatter_data$PointDiff, q4_scatter_data$Q4_YPP, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_q4, 4)))
+```
+
+    ## [1] "Correlation (r): 0.1695"
+
+``` r
 # Scatter Plot
 ggplot(q4_scatter_data, aes(x = PointDiff, y = Q4_YPP)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
@@ -1476,6 +1501,13 @@ combined_offense %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-28-2.png)<!-- -->
+
+- Based on this chart, there is not a strong conclusion to be made. The
+  reason for this is because teams that are highly effective in the
+  first 3 quarters will often use the last quarter to run out the clock
+  as best they can. On the other hand, teams that do not do well in the
+  first 3 quarters will still be trying their best to score any points
+  at the end of the game.
 
 - “2-Minute Drill” Efficiency (Clock Pressure)
 
@@ -1519,6 +1551,10 @@ combined_offense %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-29-2.png)<!-- -->
 
+- These charts show a very similar look that the 4th quarter efficiency
+  chart did, this time we’re just looking within the last 2 minutes of
+  the game. Similar conclusions can be drawn here.
+
 - Explosive Play Rate (Big Play Ability)
 
 ``` r
@@ -1546,6 +1582,10 @@ combined_offense %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
+- These charts are very telling when comparing good teams to bad teams.
+  Baltimore is sitting around 5.5% while New England is around 3%. It’s
+  clear that better teams are much more explosive.
+
 ``` r
 # Scatter Plot
 ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
@@ -1559,8 +1599,21 @@ ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- --> \##
-Defensive Statistics
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+``` r
+r_val_expl <- cor(explosive_scatter_data$PointDiff, explosive_scatter_data$ExplosiveRate, use = "complete.obs")
+r2_val_expl <- r_val_expl^2
+
+# 2. Print Statement
+print(paste("Correlation (r):", round(r_val_expl, 4)))
+```
+
+    ## [1] "Correlation (r): 0.5223"
+
+- Scatterplot version of the barchart, accounting for the entire league.
+
+## Defensive Statistics
 
 - Field Position Chart
 
@@ -1663,6 +1716,16 @@ ggplot(defense_scatter_data, aes(x = PointDiff, y = YardsAllowed)) +
 ![](README_files/figure-gfm/unnamed-chunk-34-2.png)<!-- -->
 
 ``` r
+r_val_def_ypp <- cor(defense_scatter_data$PointDiff, defense_scatter_data$YardsAllowed, use = "complete.obs")
+r2_val_def_ypp <- r_val_def_ypp^2
+
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_def_ypp, 4)))
+```
+
+    ## [1] "Correlation (r): -0.2489"
+
+``` r
 # Calculate Havoc Rate (Sacks + INTs per Dropback)
 havoc_stats <- combined_defense %>%
   # Filter for passing plays (dropbacks)
@@ -1728,6 +1791,16 @@ ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
 ![](README_files/figure-gfm/unnamed-chunk-35-2.png)<!-- -->
 
 ``` r
+r_val_havoc <- cor(havoc_scatter_data$PointDiff, havoc_scatter_data$HavocRate, use = "complete.obs")
+r2_val_havoc <- r_val_havoc^2
+
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_havoc, 4)))
+```
+
+    ## [1] "Correlation (r): 0.2952"
+
+``` r
 def_points_all <- pbp %>%
   group_by(GameId, DefenseTeam) %>%
   summarize(
@@ -1762,3 +1835,13 @@ ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
     ## `geom_smooth()` using formula = 'y ~ x'
 
 ![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
+
+``` r
+r_val_def_pts <- cor(def_points_scatter_data$PointDiff, def_points_scatter_data$DefPointsPerGame, use = "complete.obs")
+r2_val_def_pts <- r_val_def_pts^2
+
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_def_pts, 4)))
+```
+
+    ## [1] "Correlation (r): 0.1917"

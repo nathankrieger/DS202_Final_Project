@@ -37,7 +37,7 @@ pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
 
 ```
 
-Our analysis uses play-by-play data from the 2024 NFL season sourced from NFLsavant.com, a publicly accessible resource containing detailed information for every offensive snap. The dataset includes 45 variables. The relavent variables are:
+Our analysis uses play-by-play data from the 2024 NFL season sourced from NFLsavant.com, a publicly accessible resource containing detailed information for every offensive snap. The dataset includes 45 variables. The relevant variables are:
 
 GameId: The ID of the current game.
 
@@ -465,7 +465,7 @@ pbp %>%
 
 ```
 
-- this table shows how often the league is passing based off of what down it is. We can see that on 3rd down teams are most likely to pass the ball because they need the most yards at this point of the drive.
+- This table shows how often the league is passing based off of what down it is. We can see that on 3rd down teams are most likely to pass the ball because they need the most yards at this point of the drive.
 
 
 ``` {r}
@@ -903,6 +903,7 @@ efficiency_stats %>%
   theme(legend.position = "none")
 
 ```
+- This chart demonstrates the difference between good and bad teams. We can see that the top 5 teams are much more efficient on offense.
 
 ``` {r}
 # 1. Calculate Point Differential for ALL teams
@@ -952,6 +953,9 @@ print(paste("Correlation (r):", round(r_value, 4)))
 
 ```
 
+- Scatterplot version of the barchart, accounting for the entire league.
+
+
 - Play-Calling Tendencies Chart
 
 ``` {r}
@@ -983,6 +987,8 @@ play_tendencies %>%
   theme_minimal()
 
 ```
+
+- This barchart is a strong indicator of the disfunctions of a bad team. Bad teams do not run the ball nearly as much as good teams. Without an effective run game, the defense only needs to defend passing plays, making them even more effective against bad teams.
 
 ``` {r}
 
@@ -1020,6 +1026,7 @@ pass_scatter_data %>%
 
 ```
 
+- Scatterplot version of the barchart, accounting for the entire league.
 
 - Down Efficiency Chart
 
@@ -1049,6 +1056,7 @@ down_stats %>%
   theme(legend.position = "none")
 ```
 
+- Based on these charts, 3rd down success rate is a huge indicator of what makes a team good. Teams towards the bottom in point differential do not preform well under pressure. New England's 3rd down success rate is less than 50%.
 
 ``` {r}
 
@@ -1086,7 +1094,7 @@ print(paste("Correlation (r):", round(r_val_3rd, 4)))
 
 ```
 
-
+- Scatterplot version of the barchart, accounting for the entire league.
 
 
 
@@ -1128,6 +1136,8 @@ combined_offense %>%
 
 ```
 
+- Based on this chart, there is not a strong conclusion to be made. The reason for this is because teams that are highly effective in the first 3 quarters will often use the last quarter to run out the clock as best they can. On the other hand, teams that do not do well in the first 3 quarters will still be trying their best to score any points at the end of the game.
+
 - "2-Minute Drill" Efficiency (Clock Pressure)
 
 ``` {r}
@@ -1164,6 +1174,8 @@ combined_offense %>%
 
 ```
 
+- These charts show a very similar look that the 4th quarter efficiency chart did, this time we're just looking within the last 2 minutes of the game. Similar conclusions can be drawn here.
+
 - Explosive Play Rate (Big Play Ability)
 
 ``` {r}
@@ -1193,6 +1205,8 @@ combined_offense %>%
 
 ```
 
+- These charts are very telling when comparing good teams to bad teams. Baltimore is sitting around 5.5% while New England is around 3%. It's clear that better teams are much more explosive.
+
 ``` {r}
 # Scatter Plot
 ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
@@ -1209,6 +1223,9 @@ r2_val_expl <- r_val_expl^2
 # 2. Print Statement
 print(paste("Correlation (r):", round(r_val_expl, 4)))
 ```
+
+- Scatterplot version of the barchart, accounting for the entire league.
+
 ## Defensive Statistics
 
 - Field Position Chart
