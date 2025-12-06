@@ -2,7 +2,7 @@ Analysis on NFL Play-By-Play Data
 ================
 Nathan Krieger, Caleb Moe
 
-\##Introduction
+## Introduction
 
 The modern NFL is defined by information; every snap generates data that
 can explain why teams win or lose. While traditional box scores tell us
@@ -26,7 +26,7 @@ Allowed, starting field positions, and more.
 By isolating these variables, we aim to identify the patterns that
 define success in the 2024 NFL season.
 
-\##Data
+## Data
 
 ### Retrieving dataset
 
@@ -75,7 +75,15 @@ IsInterception: Shows if the play resulted in an interception.
 
 Formation: Shows the offensive formation for the current play.
 
-\##Cleaning The Data
+## Cleaning The Data
+
+- We quickly found that this dataset lacks score statisics that are
+  important for our analysis. We decided to stick with this dataset and
+  parse the descriptions to get the score. This proved to be quite
+  challenging: we found that the data wasn’t always consistent, so
+  parsing the description was tedious. Also, football has so many edge
+  cases and odd plays that we needed to handle.
+- We also build out our dataset by adding several more columns.
 
 ``` r
 # data exploration
@@ -739,6 +747,8 @@ pbp %>%
     ## # ℹ 195 more rows
     ## # ℹ 1 more variable: IsInterception <dbl>
 
+## Basic Data Exporation
+
 ``` r
 # Pass Rate By Down
 
@@ -758,6 +768,10 @@ pbp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+- this table shows how often the league is passing based off of what
+  down it is. We can see that on 3rd down teams are most likely to pass
+  the ball because they need the most yards at this point of the drive.
 
 ``` r
 # Pass vs Run by Field Position
@@ -783,7 +797,9 @@ pbp %>%
     ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
     ## generated.
 
-![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- --> - This chart
+shows the pass rate by the yard line. The results are fairly consistent
+when looking at all plays at all times of the game.
 
 ``` r
 # Yards Gained by Down
@@ -803,6 +819,10 @@ pbp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+- This chart shows average yards gained per down. 4th down is the clear
+  standout here. This is because teams often only need a small amount of
+  yards if they are going for it on 4th down.
 
 ``` r
 # Play Type Frequency (Run, Pass, Sack)
@@ -830,6 +850,9 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
+- This chart is a basic analysis on what types of plays are run the most
+  often. The league passes the ball more than anything else.
+
 ``` r
 #Rate of big plays (20 yards or more) by down
 pbp %>%
@@ -852,6 +875,11 @@ pbp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+- This chart shows big or “explosive” plays. We can see that the most
+  explosive plays happen on 3rd down. This makes sense based on previous
+  exploration where we found that teams are passing the ball the most on
+  3rd down.
 
 ``` r
 # Yards to go on third vs likelyhood of run or pass
@@ -896,6 +924,11 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
+- This chart shows what teams are doing with the ball on 3rd down based
+  off of how many yards they need for the first down. We can see that
+  running is very popular if they only need a yard or two, but otherwise
+  teams are passing the ball.
+
 ``` r
 # Based on field position, how likely to go for it on 4th
 pbp %>%
@@ -931,6 +964,17 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
+- We found the chart above to be very interesting. It’s clear that teams
+  are going for it quite often when close to scoring a touchdown.
+  However, the spike in the middle of the graph is harder to explain.
+  The 71-80 yard line is where the offense generally ends up after a
+  kickoff, which happens when the opposing team has just scored. Based
+  on this, we can gather that teams are likely to go for it here because
+  they often need to answer for their opponent’s recent points,
+  especially at the end of the game. There is a sharp drop off after
+  teams are within 50 yards from scoring because teams are more likely
+  to opt for a field goal in this case.
+
 ``` r
 #Field goal count by quarter
 pbp %>%
@@ -947,6 +991,10 @@ pbp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+- It’s clear from this chart that field goals are most common in the 2nd
+  quarter. This can be explained by teams wanting to get points before
+  the half ends.
 
 ``` r
 #likelyhood of interceptions based on down
@@ -969,7 +1017,8 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- --> - This chart
+demonstrates teams experiencing more desparation on 3rd and 4th down.
 
 ``` r
 # Likelihood of interceptions based on field position 
@@ -1006,6 +1055,11 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
+- This chart shows the interception rate based on where the offense is
+  on the field. When very close to their own endzone, teams are rarely
+  throwing interceptions. This is becasue they are rarely throwing in
+  general because it is a dangerous area of the field.
+
 ``` r
 #Tracking "success" by using the 40%,60%,100% rule
 
@@ -1026,7 +1080,8 @@ pbp %>%
   labs(title="Success Rate by Down", x="Down", y="Success Rate")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- --> - This chart
+illustrates that teams are most successful on 1st down.
 
 ``` r
 #Pass rate by Downs and Distance (excluding plays with more than 20 yards till first down/touchdown)
@@ -1043,7 +1098,13 @@ pbp %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
-- A chart on team wins
+- This heatmap is another illustration of teams passing vs. running the
+  ball based on down and distance. 4th down stands out because teams do
+  not pass nearly as often here.
+
+## Diving Deeper: Analyzing what makes a team successful
+
+- Identify the top and bottom 5 Teams and Filter Data
 
 ``` r
 # Calculate wins per team from final_scores
@@ -1073,6 +1134,11 @@ team_wins %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+- Wins is a good stat to determine the the strength of teams, but there
+  is a better stat: point differential.
+- Point differential shows Points Scored minus Points Allowed. This
+  better accounts for things like strength of schedule.
 
 ``` r
 # Calculate Point Differential for ALL 32 Teams
@@ -1105,10 +1171,6 @@ all_team_differential %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
-
-## Diving Deeper: Analyzing what makes a team successful
-
-- Identify the Top 5 Teams and Filter Data
 
 ``` r
 # --- 1. Calculate Point Differential ---
@@ -1222,6 +1284,13 @@ team_scatter_data %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
+``` r
+r_value <- cor(team_scatter_data$PointDiff, team_scatter_data$YPP, use = "complete.obs")
+print(paste("Correlation (r):", round(r_value, 4)))
+```
+
+    ## [1] "Correlation (r): 0.6384"
+
 - Play-Calling Tendencies Chart
 
 ``` r
@@ -1267,6 +1336,14 @@ team_pass_rate <- pbp %>%
 pass_scatter_data <- team_differential %>%
   inner_join(team_pass_rate, by = c("Team" = "OffenseTeam"))
 
+# --- NEW STEP: Calculate R-squared ---
+r_val_pass <- cor(pass_scatter_data$PointDiff, pass_scatter_data$PassRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_pass, 4)))
+```
+
+    ## [1] "Correlation (r): -0.6021"
+
+``` r
 # 3. Create Scatter Plot
 pass_scatter_data %>%
   ggplot(aes(x = PointDiff, y = PassRate)) +
@@ -1350,6 +1427,13 @@ efficiency_scatter_data %>%
     ## `geom_smooth()` using formula = 'y ~ x'
 
 ![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+``` r
+r_val_3rd <- cor(efficiency_scatter_data$PointDiff, efficiency_scatter_data$ConversionRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_3rd, 4)))
+```
+
+    ## [1] "Correlation (r): 0.7406"
 
 - 4th Quarter Efficiency (Game End Pressure)
 
@@ -1610,3 +1694,71 @@ havoc_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+
+``` r
+havoc_all <- pbp %>%
+  filter(IsPass == 1 | IsSack == 1) %>%   # dropbacks
+  group_by(DefenseTeam) %>%
+  summarize(
+    Dropbacks = n(),
+    HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
+    HavocRate = HavocPlays / Dropbacks,
+    .groups = "drop"
+  )
+
+havoc_scatter_data <- team_differential %>%
+  inner_join(havoc_all, by = c("Team" = "DefenseTeam"))
+
+ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Defensive Havoc Rate vs. Point Differential",
+    subtitle = "Havoc = (Sacks + Interceptions) / Dropbacks",
+    x = "Point Differential",
+    y = "Havoc Rate"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-35-2.png)<!-- -->
+
+``` r
+def_points_all <- pbp %>%
+  group_by(GameId, DefenseTeam) %>%
+  summarize(
+    DefPoints = sum(DefPointsPlay, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(DefenseTeam) %>%
+  summarize(
+    Games = n(),
+    DefPointsPerGame = mean(DefPoints),
+    .groups = "drop"
+  )
+# 2) Join with team_differential to get PointDiff
+def_points_scatter_data <- team_differential %>%
+  inner_join(def_points_all, by = c("Team" = "DefenseTeam"))
+
+
+# 3) Scatter plot: Defensive scoring rate vs Point Differential
+ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Defensive Points Generated vs Point Differential",
+    subtitle = "Defensive scoring includes TDs, safeties, and defensive 2-point returns",
+    x = "Point Differential",
+    y = "Defensive Points Per Game"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->

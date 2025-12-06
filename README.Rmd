@@ -11,7 +11,7 @@ library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##Introduction
+## Introduction
 
 The modern NFL is defined by information; every snap generates data that can explain why teams win or lose. While traditional box scores tell us what happened, play-by-play (PBP) analysis reveals how and why it happened. This project leverages granular PBP data from the 2024 season to deconstruct the decision-making processes that separate elite contenders from struggling franchises.
 
@@ -26,7 +26,7 @@ Defensive Effectiveness: Measuring defensive performance through Yards Allowed, 
 By isolating these variables, we aim to identify the patterns that define success in the 2024 NFL season.
 
 
-##Data
+## Data
 
 ### Retrieving dataset
 
@@ -62,7 +62,7 @@ IsInterception: Shows if the play resulted in an interception.
 Formation: Shows the offensive formation for the current play.
 
 
-##Cleaning The Data
+## Cleaning The Data
 
 - We quickly found that this dataset lacks score statisics that are important for our analysis. We decided to stick with this dataset and parse the descriptions to get the score. This proved to be quite challenging: we found that the data wasn't always consistent, so parsing the description was tedious. Also, football has so many edge cases and odd plays that we needed to handle.
 - We also build out our dataset by adding several more columns.
@@ -465,7 +465,7 @@ pbp %>%
 
 ```
 
-- THis table shows how often the league is passing based off of what down it is. We can see that on 3rd down teams are most likely to pass the ball because they need the most yards at this point of the drive.
+- this table shows how often the league is passing based off of what down it is. We can see that on 3rd down teams are most likely to pass the ball because they need the most yards at this point of the drive.
 
 
 ``` {r}
@@ -488,7 +488,7 @@ pbp %>%
 
 
 ```
-This chart shows the pass rate by the yard line. The results are fairly consistent when looking at all plays at all times of the game.
+- This chart shows the pass rate by the yard line. The results are fairly consistent when looking at all plays at all times of the game.
 
 ``` {r}
 
@@ -539,6 +539,7 @@ pbp %>%
 ```
 
 - This chart is a basic analysis on what types of plays are run the most often. The league passes the ball more than anything else.
+
 ``` {r}
 #Rate of big plays (20 yards or more) by down
 pbp %>%
@@ -560,7 +561,9 @@ pbp %>%
   theme_minimal()
 
 ```
-- This chart shows big or "explosive" 
+
+- This chart shows big or "explosive" plays. We can see that the most explosive plays happen on 3rd down. This makes sense based on previous exploration where we found that teams are passing the ball the most on 3rd down.
+
 ``` {r}
 # Yards to go on third vs likelyhood of run or pass
 pbp %>%
@@ -602,6 +605,8 @@ pbp %>%
   theme_minimal()
 
 ```
+
+- This chart shows what teams are doing with the ball on 3rd down based off of how many yards they need for the first down. We can see that running is very popular if they only need a yard or two, but otherwise teams are passing the ball.
 
 ``` {r}
 # Based on field position, how likely to go for it on 4th
@@ -719,6 +724,8 @@ pbp %>%
 
 ```
 
+- This chart shows the interception rate based on where the offense is on the field. When very close to their own endzone, teams are rarely throwing interceptions. This is becasue they are rarely throwing in general because it is a dangerous area of the field.
+
 ``` {r}
 #Tracking "success" by using the 40%,60%,100% rule
 
@@ -741,6 +748,7 @@ pbp %>%
 
 
 ```
+- This chart illustrates that teams are most successful on 1st down.
 
 ``` {r}
 #Pass rate by Downs and Distance (excluding plays with more than 20 yards till first down/touchdown)
@@ -756,6 +764,8 @@ pbp %>%
 
 
 ```
+
+- This heatmap is another illustration of teams passing vs. running the ball based on down and distance. 4th down stands out because teams do not pass nearly as often here.
 
 ## Diving Deeper: Analyzing what makes a team successful
 
@@ -937,6 +947,8 @@ team_scatter_data %>%
   ) +
   theme_minimal()
 
+r_value <- cor(team_scatter_data$PointDiff, team_scatter_data$YPP, use = "complete.obs")
+print(paste("Correlation (r):", round(r_value, 4)))
 
 ```
 
@@ -986,6 +998,10 @@ team_pass_rate <- pbp %>%
 pass_scatter_data <- team_differential %>%
   inner_join(team_pass_rate, by = c("Team" = "OffenseTeam"))
 
+# --- NEW STEP: Calculate R-squared ---
+r_val_pass <- cor(pass_scatter_data$PointDiff, pass_scatter_data$PassRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_pass, 4)))
+
 # 3. Create Scatter Plot
 pass_scatter_data %>%
   ggplot(aes(x = PointDiff, y = PassRate)) +
@@ -1000,6 +1016,7 @@ pass_scatter_data %>%
     y = "Overall Pass Rate"
   ) +
   theme_minimal()
+
 
 ```
 
@@ -1063,6 +1080,9 @@ efficiency_scatter_data %>%
     y = "3rd Down Conversion Rate"
   ) +
   theme_minimal()
+
+r_val_3rd <- cor(efficiency_scatter_data$PointDiff, efficiency_scatter_data$ConversionRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_3rd, 4)))
 
 ```
 
