@@ -1173,6 +1173,24 @@ field_stats %>%
 ``` {r}
 
 
+# --- Create Defensive Dataset using EXISTING top/bottom lists ---
+
+top_teams <- team_differential %>% slice_head(n = 5) %>% pull(Team)
+bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team)
+
+# Filter PBP for when the Top 5 Point-Diff teams are on DEFENSE
+top_5_defense <- pbp %>%
+  filter(DefenseTeam %in% top_teams) %>%
+  mutate(Group = "Top 5 (Best Diff)")
+
+# Filter PBP for when the Bottom 5 Point-Diff teams are on DEFENSE
+bottom_5_defense <- pbp %>%
+  filter(DefenseTeam %in% bottom_teams) %>%
+  mutate(Group = "Bottom 5 (Worst Diff)")
+
+# Combine into one Master Defense Dataset
+combined_defense <- bind_rows(top_5_defense, bottom_5_defense) %>%
+  mutate(Group = factor(Group, levels = c("Top 5 (Best Diff)", "Bottom 5 (Worst Diff)")))
 
 ```
 
@@ -1193,7 +1211,7 @@ defense_ypp %>%
   scale_fill_manual(values = c("forestgreen", "firebrick")) +
   labs(
     title = "Defensive Efficiency: Yards Allowed Per Play",
-    subtitle = "Comparing Defenses of the Best vs. Worst Teams",
+    subtitle = "Lower is Better (Do best teams also have best defenses?)",
     x = "Team",
     y = "Avg Yards Allowed"
   ) +
@@ -1205,7 +1223,34 @@ defense_ypp %>%
 
 ``` {r}
 
+# Calculate Havoc Rate (Sacks + INTs per Dropback)
+havoc_stats <- combined_defense %>%
+  # Filter for passing plays (dropbacks)
+  filter(IsPass == 1 | IsSack == 1) %>%
+  group_by(Group, DefenseTeam) %>%
+  summarize(
+    Dropbacks = n(),
+    HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
+    HavocRate = HavocPlays / Dropbacks,
+    .groups = "drop"
+  )
 
+# Plot
+havoc_stats %>%
+  ggplot(aes(x = reorder(DefenseTeam, HavocRate), y = HavocRate, fill = Group)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Havoc Rate: Sacks & Interceptions",
+    subtitle = "Percentage of dropbacks resulting in a Sack or INT",
+    x = "Team",
+    y = "Havoc Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 
 ```
 
