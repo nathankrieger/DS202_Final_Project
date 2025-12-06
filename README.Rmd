@@ -1026,33 +1026,7 @@ efficiency_scatter_data %>%
 ```
 
 
-- Field Position Chart
 
-
-``` {r}
-
-# Calculate Field Position
-field_stats <- combined_offense %>%
-  group_by(Group, OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
-
-# Plot
-field_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
-  geom_point(size = 4) +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
-  coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_color_manual(values = c("steelblue", "firebrick")) +
-  labs(
-    title = "Average Starting Field Position",
-    x = "Team",
-    y = "Yard Line"
-  ) +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-```
 
 
 - 4th Quarter Efficiency (Game End Pressure)
@@ -1111,7 +1085,7 @@ ggplot(two_min_scatter_data, aes(x = PointDiff, y = TwoMin_YPP)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   geom_point(color = "orange", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
-  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of halves",
+  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of first half",
        x = "Point Differential", y = "2-Min Drill Yards/Play") + theme_minimal()
 
 # 2. Bar Chart
@@ -1166,9 +1140,65 @@ ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
 
 
 ```
+## Defensive Statistics
+
+- Field Position Chart
+
 
 ``` {r}
 
+# Calculate Field Position
+field_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
+
+# Plot
+field_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
+  labs(
+    title = "Average Starting Field Position",
+    x = "Team",
+    y = "Yard Line"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+``` {r}
+
+
+
+```
+
+
+``` {r}
+
+# Calculate Yards Allowed
+defense_ypp <- combined_defense %>%
+  group_by(Group, DefenseTeam) %>%
+  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Plot
+defense_ypp %>%
+  ggplot(aes(x = reorder(DefenseTeam, -YardsAllowed), y = YardsAllowed, fill = Group)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  labs(
+    title = "Defensive Efficiency: Yards Allowed Per Play",
+    subtitle = "Comparing Defenses of the Best vs. Worst Teams",
+    x = "Team",
+    y = "Avg Yards Allowed"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 
 
 ```
