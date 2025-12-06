@@ -1284,6 +1284,13 @@ team_scatter_data %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
+``` r
+r_value <- cor(team_scatter_data$PointDiff, team_scatter_data$YPP, use = "complete.obs")
+print(paste("Correlation (r):", round(r_value, 4)))
+```
+
+    ## [1] "Correlation (r): 0.6384"
+
 - Play-Calling Tendencies Chart
 
 ``` r
@@ -1329,6 +1336,14 @@ team_pass_rate <- pbp %>%
 pass_scatter_data <- team_differential %>%
   inner_join(team_pass_rate, by = c("Team" = "OffenseTeam"))
 
+# --- NEW STEP: Calculate R-squared ---
+r_val_pass <- cor(pass_scatter_data$PointDiff, pass_scatter_data$PassRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_pass, 4)))
+```
+
+    ## [1] "Correlation (r): -0.6021"
+
+``` r
 # 3. Create Scatter Plot
 pass_scatter_data %>%
   ggplot(aes(x = PointDiff, y = PassRate)) +
@@ -1412,6 +1427,13 @@ efficiency_scatter_data %>%
     ## `geom_smooth()` using formula = 'y ~ x'
 
 ![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+``` r
+r_val_3rd <- cor(efficiency_scatter_data$PointDiff, efficiency_scatter_data$ConversionRate, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_3rd, 4)))
+```
+
+    ## [1] "Correlation (r): 0.7406"
 
 - 4th Quarter Efficiency (Game End Pressure)
 
@@ -1672,3 +1694,71 @@ havoc_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+
+``` r
+havoc_all <- pbp %>%
+  filter(IsPass == 1 | IsSack == 1) %>%   # dropbacks
+  group_by(DefenseTeam) %>%
+  summarize(
+    Dropbacks = n(),
+    HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
+    HavocRate = HavocPlays / Dropbacks,
+    .groups = "drop"
+  )
+
+havoc_scatter_data <- team_differential %>%
+  inner_join(havoc_all, by = c("Team" = "DefenseTeam"))
+
+ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Defensive Havoc Rate vs. Point Differential",
+    subtitle = "Havoc = (Sacks + Interceptions) / Dropbacks",
+    x = "Point Differential",
+    y = "Havoc Rate"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-35-2.png)<!-- -->
+
+``` r
+def_points_all <- pbp %>%
+  group_by(GameId, DefenseTeam) %>%
+  summarize(
+    DefPoints = sum(DefPointsPlay, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(DefenseTeam) %>%
+  summarize(
+    Games = n(),
+    DefPointsPerGame = mean(DefPoints),
+    .groups = "drop"
+  )
+# 2) Join with team_differential to get PointDiff
+def_points_scatter_data <- team_differential %>%
+  inner_join(def_points_all, by = c("Team" = "DefenseTeam"))
+
+
+# 3) Scatter plot: Defensive scoring rate vs Point Differential
+ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Defensive Points Generated vs Point Differential",
+    subtitle = "Defensive scoring includes TDs, safeties, and defensive 2-point returns",
+    x = "Point Differential",
+    y = "Defensive Points Per Game"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
