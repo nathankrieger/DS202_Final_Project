@@ -1105,6 +1105,8 @@ q4_stats_all <- pbp %>%
 # Join
 q4_scatter_data <- team_differential %>% inner_join(q4_stats_all, by = c("Team" = "OffenseTeam"))
 
+r_val_q4 <- cor(q4_scatter_data$PointDiff, q4_scatter_data$Q4_YPP, use = "complete.obs")
+print(paste("Correlation (r):", round(r_val_q4, 4)))
 # Scatter Plot
 ggplot(q4_scatter_data, aes(x = PointDiff, y = Q4_YPP)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
@@ -1187,6 +1189,8 @@ combined_offense %>%
   labs(title = "Explosive Play Rate (Top 5 vs Bottom 5)", subtitle = "% of plays gaining 20+ Yards",
        x = "Team", y = "Explosive Rate") + theme_minimal() + theme(legend.position = "none")
 
+
+
 ```
 
 ``` {r}
@@ -1199,7 +1203,11 @@ ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
   labs(title = "Explosive Play Rate vs. Point Differential", subtitle = "% of plays gaining 20+ Yards",
        x = "Point Differential", y = "Explosive Play Rate") + theme_minimal()
 
+r_val_expl <- cor(explosive_scatter_data$PointDiff, explosive_scatter_data$ExplosiveRate, use = "complete.obs")
+r2_val_expl <- r_val_expl^2
 
+# 2. Print Statement
+print(paste("Correlation (r):", round(r_val_expl, 4)))
 ```
 ## Defensive Statistics
 
@@ -1302,6 +1310,12 @@ ggplot(defense_scatter_data, aes(x = PointDiff, y = YardsAllowed)) +
   ) +
   theme_minimal()
 
+r_val_def_ypp <- cor(defense_scatter_data$PointDiff, defense_scatter_data$YardsAllowed, use = "complete.obs")
+r2_val_def_ypp <- r_val_def_ypp^2
+
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_def_ypp, 4)))
+
 ```
 
 ``` {r}
@@ -1361,7 +1375,11 @@ ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
   ) +
   theme_minimal()
 
+r_val_havoc <- cor(havoc_scatter_data$PointDiff, havoc_scatter_data$HavocRate, use = "complete.obs")
+r2_val_havoc <- r_val_havoc^2
 
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_havoc, 4)))
 
 ```
 
@@ -1396,6 +1414,12 @@ ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
     y = "Defensive Points Per Game"
   ) +
   theme_minimal()
+
+r_val_def_pts <- cor(def_points_scatter_data$PointDiff, def_points_scatter_data$DefPointsPerGame, use = "complete.obs")
+r2_val_def_pts <- r_val_def_pts^2
+
+# 4. Print Statement
+print(paste("Correlation (r):", round(r_val_def_pts, 4)))
 
 
 ```
