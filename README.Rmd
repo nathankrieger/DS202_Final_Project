@@ -64,6 +64,9 @@ Formation: Shows the offensive formation for the current play.
 
 ##Cleaning The Data
 
+- We quickly found that this dataset lacks score statisics that are important for our analysis. We decided to stick with this dataset and parse the descriptions to get the score. This proved to be quite challenging: we found that the data wasn't always consistent, so parsing the description was tedious. Also, football has so many edge cases and odd plays that we needed to handle.
+- We also build out our dataset by adding several more columns.
+
 ``` {r}
 # data exploration
 head(pbp)
@@ -424,6 +427,8 @@ pbp %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
 ```
 
+## Basic Data Exporation
+
 ``` {r}
 
 # Pass Rate By Down
@@ -445,6 +450,9 @@ pbp %>%
 
 ```
 
+- THis table shows how often the league is passing based off of what down it is. We can see that on 3rd down teams are most likely to pass the ball because they need the most yards at this point of the drive.
+
+
 ``` {r}
 
 # Pass vs Run by Field Position
@@ -465,6 +473,7 @@ pbp %>%
 
 
 ```
+This chart shows the pass rate by the yard line. The results are fairly consistent when looking at all plays at all times of the game.
 
 ``` {r}
 
@@ -484,6 +493,8 @@ pbp %>%
   theme_minimal()
 
 ```
+
+- This chart shows average yards gained per down. 4th down is the clear standout here. This is because teams often only need a small amount of yards if they are going for it on 4th down.
 
 ``` {r}
 
@@ -512,6 +523,7 @@ pbp %>%
 
 ```
 
+- This chart is a basic analysis on what types of plays are run the most often. The league passes the ball more than anything else.
 ``` {r}
 #Rate of big plays (20 yards or more) by down
 pbp %>%
@@ -533,7 +545,7 @@ pbp %>%
   theme_minimal()
 
 ```
-
+- This chart shows big or "explosive" 
 ``` {r}
 # Yards to go on third vs likelyhood of run or pass
 pbp %>%
@@ -610,6 +622,8 @@ pbp %>%
 
 ```
 
+- We found the chart above to be very interesting. It's clear that teams are going for it quite often when close to scoring a touchdown. However, the spike in the middle of the graph is harder to explain. The 71-80 yard line is where the offense generally ends up after a kickoff, which happens when the opposing team has just scored. Based on this, we can gather that teams are likely to go for it here because they often need to answer for their opponent's recent points, especially at the end of the game. There is a sharp drop off after teams are within 50 yards from scoring because teams are more likely to opt for a field goal in this case.
+
 ``` {r}
 #Field goal count by quarter
 pbp %>%
@@ -626,6 +640,9 @@ pbp %>%
 
 
 ```
+
+- It's clear from this chart that field goals are most common in the 2nd quarter. This can be explained by teams wanting to get points before the half ends.
+
 
 ``` {r}
 #likelyhood of interceptions based on down
@@ -649,6 +666,7 @@ pbp %>%
 
 
 ```
+- This chart demonstrates teams experiencing more desparation on 3rd and 4th down.
 
 ``` {r}
 
@@ -724,7 +742,9 @@ pbp %>%
 
 ```
 
-- A chart on team wins 
+## Diving Deeper: Analyzing what makes a team successful
+
+- Identify the top and bottom 5 Teams and Filter Data
 
 
 ``` {r}
@@ -755,6 +775,9 @@ team_wins %>%
   theme_minimal()
 
 ```
+
+- Wins is a good stat to determine the the strength of teams, but there is a better stat: point differential.
+- Point differential shows Points Scored minus Points Allowed. This better accounts for things like strength of schedule.
 
 ``` {r}
 
@@ -789,10 +812,6 @@ all_team_differential %>%
 
 ```
 
-
-## Diving Deeper: Analyzing what makes a team successful
-
-- Identify the Top 5 Teams and Filter Data
 
 ``` {r}
 
