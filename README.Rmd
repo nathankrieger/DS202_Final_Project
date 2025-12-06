@@ -1315,10 +1315,67 @@ havoc_stats %>%
   theme_minimal() +
   theme(legend.position = "none")
 
+havoc_all <- pbp %>%
+  filter(IsPass == 1 | IsSack == 1) %>%   # dropbacks
+  group_by(DefenseTeam) %>%
+  summarize(
+    Dropbacks = n(),
+    HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
+    HavocRate = HavocPlays / Dropbacks,
+    .groups = "drop"
+  )
+
+havoc_scatter_data <- team_differential %>%
+  inner_join(havoc_all, by = c("Team" = "DefenseTeam"))
+
+ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Defensive Havoc Rate vs. Point Differential",
+    subtitle = "Havoc = (Sacks + Interceptions) / Dropbacks",
+    x = "Point Differential",
+    y = "Havoc Rate"
+  ) +
+  theme_minimal()
+
+
+
 ```
 
 ``` {r}
 
+def_points_all <- pbp %>%
+  group_by(GameId, DefenseTeam) %>%
+  summarize(
+    DefPoints = sum(DefPointsPlay, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(DefenseTeam) %>%
+  summarize(
+    Games = n(),
+    DefPointsPerGame = mean(DefPoints),
+    .groups = "drop"
+  )
+# 2) Join with team_differential to get PointDiff
+def_points_scatter_data <- team_differential %>%
+  inner_join(def_points_all, by = c("Team" = "DefenseTeam"))
+
+
+# 3) Scatter plot: Defensive scoring rate vs Point Differential
+ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Defensive Points Generated vs Point Differential",
+    subtitle = "Defensive scoring includes TDs, safeties, and defensive 2-point returns",
+    x = "Point Differential",
+    y = "Defensive Points Per Game"
+  ) +
+  theme_minimal()
 
 
 ```
