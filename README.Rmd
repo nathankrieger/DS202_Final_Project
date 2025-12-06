@@ -11,6 +11,25 @@ library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+##Introduction
+
+The modern NFL is defined by information; every snap generates data that can explain why teams win or lose. While traditional box scores tell us what happened, play-by-play (PBP) analysis reveals how and why it happened. This project leverages granular PBP data from the 2024 season to deconstruct the decision-making processes that separate elite contenders from struggling franchises.
+
+Our analysis explores what makes an NFL team good and what makes them bad.
+
+Point Differential: A comparative analysis of the Top 5 and Bottom 5 teams by point differential.
+
+Offensive Effectiveness: Measuring offensive performance through Yards Per Play (YPP), conversion rates, and more.
+
+Defensive Effectiveness: Measuring defensive performance through Yards Allowed, starting field positions, and more.
+
+By isolating these variables, we aim to identify the patterns that define success in the 2024 NFL season.
+
+
+##Data
+
+### Retrieving dataset
+
 ``` {r}
 
 pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
@@ -18,44 +37,32 @@ pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
 
 ```
 
-**Introduction**
+Our analysis uses play-by-play data from the 2024 NFL season sourced from NFLsavant.com, a publicly accessible resource containing detailed information for every offensive snap. The dataset includes 45 variables. The relavent variables are:
 
-The NFL has become increasingly data-driven, and play-by-play (PBP) information provides one of the richest views into how teams behave on the field. In recent years, analysts have used PBP data to uncover trends such as fourth-down aggression, pass-rate over expectation, route combinations, motion usage, and situational efficiency.
+GameId: The ID of the current game.
 
-Our project explores play-by-play trends across the NFL, focusing on how offensive decision-making and performance vary by:
+Quarter: The current quarter.
 
-Down & distance
+Minute: The current minute in the quarter.
 
-Field position
+Second: The current second of the minute.
 
-Play type (run/pass)
+YardLine: What yardline the team is on.
 
-Quarter & game situation
+Offense Team: The team on offense.
 
-Score differential
+Defense Team: The team on defense.
 
-Team tendencies
+Description: Explains what happened on the play and the play's outcomes.
 
-The goal is to identify meaningful behavioral patterns and performance outcomes that can help explain how modern offenses operate.
+PlayType: The play type. Can be pass or run.
 
-We also evaluate the robustness of our findings with multiple approaches and highlight unintuitive results requiring further investigation.
+IsInterception: Shows if the play resulted in an interception.
+
+Formation: Shows the offensive formation for the current play.
 
 
-**Data**
-
-Our analysis uses play-by-play data from NFLsavant.com, a publicly accessible resource containing detailed information for every offensive snap. The dataset includes 45 variables such as:
-
-GameId
-
-Quarter
-
-Minute
-
-YardLine
-
-Formation
-
-And many more...
+##Cleaning The Data
 
 ``` {r}
 # data exploration

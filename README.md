@@ -1326,33 +1326,6 @@ efficiency_scatter_data %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
-- Field Position Chart
-
-``` r
-# Calculate Field Position
-field_stats <- combined_offense %>%
-  group_by(Group, OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
-
-# Plot
-field_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
-  geom_point(size = 4) +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
-  coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_color_manual(values = c("steelblue", "firebrick")) +
-  labs(
-    title = "Average Starting Field Position",
-    x = "Team",
-    y = "Yard Line"
-  ) +
-  theme_minimal() +
-  theme(legend.position = "none")
-```
-
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
-
 - 4th Quarter Efficiency (Game End Pressure)
 
 ``` r
@@ -1378,7 +1351,7 @@ ggplot(q4_scatter_data, aes(x = PointDiff, y = Q4_YPP)) +
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ``` r
 # 2. Bar Chart
@@ -1393,7 +1366,7 @@ combined_offense %>%
        x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-29-2.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-2.png)<!-- -->
 
 - “2-Minute Drill” Efficiency (Clock Pressure)
 
@@ -1414,13 +1387,13 @@ ggplot(two_min_scatter_data, aes(x = PointDiff, y = TwoMin_YPP)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   geom_point(color = "orange", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
-  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of halves",
+  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of first half",
        x = "Point Differential", y = "2-Min Drill Yards/Play") + theme_minimal()
 ```
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ``` r
 # 2. Bar Chart
@@ -1435,7 +1408,7 @@ combined_offense %>%
        x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-30-2.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-2.png)<!-- -->
 
 - Explosive Play Rate (Big Play Ability)
 
@@ -1462,7 +1435,7 @@ combined_offense %>%
        x = "Team", y = "Explosive Rate") + theme_minimal() + theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ``` r
 # Scatter Plot
@@ -1477,4 +1450,111 @@ ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- --> \##
+Defensive Statistics
+
+- Field Position Chart
+
+``` r
+# Calculate Field Position
+field_stats <- combined_offense %>%
+  group_by(Group, OffenseTeam) %>%
+  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
+
+# Plot
+field_stats %>%
+  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
+  labs(
+    title = "Average Starting Field Position",
+    x = "Team",
+    y = "Yard Line"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
 ![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+``` r
+# --- Create Defensive Dataset using EXISTING top/bottom lists ---
+
+top_teams <- team_differential %>% slice_head(n = 5) %>% pull(Team)
+bottom_teams <- team_differential %>% slice_tail(n = 5) %>% pull(Team)
+
+# Filter PBP for when the Top 5 Point-Diff teams are on DEFENSE
+top_5_defense <- pbp %>%
+  filter(DefenseTeam %in% top_teams) %>%
+  mutate(Group = "Top 5 (Best Diff)")
+
+# Filter PBP for when the Bottom 5 Point-Diff teams are on DEFENSE
+bottom_5_defense <- pbp %>%
+  filter(DefenseTeam %in% bottom_teams) %>%
+  mutate(Group = "Bottom 5 (Worst Diff)")
+
+# Combine into one Master Defense Dataset
+combined_defense <- bind_rows(top_5_defense, bottom_5_defense) %>%
+  mutate(Group = factor(Group, levels = c("Top 5 (Best Diff)", "Bottom 5 (Worst Diff)")))
+```
+
+``` r
+# Calculate Yards Allowed
+defense_ypp <- combined_defense %>%
+  group_by(Group, DefenseTeam) %>%
+  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Plot
+defense_ypp %>%
+  ggplot(aes(x = reorder(DefenseTeam, -YardsAllowed), y = YardsAllowed, fill = Group)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  labs(
+    title = "Defensive Efficiency: Yards Allowed Per Play",
+    subtitle = "Lower is Better (Do best teams also have best defenses?)",
+    x = "Team",
+    y = "Avg Yards Allowed"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+
+``` r
+# Calculate Havoc Rate (Sacks + INTs per Dropback)
+havoc_stats <- combined_defense %>%
+  # Filter for passing plays (dropbacks)
+  filter(IsPass == 1 | IsSack == 1) %>%
+  group_by(Group, DefenseTeam) %>%
+  summarize(
+    Dropbacks = n(),
+    HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
+    HavocRate = HavocPlays / Dropbacks,
+    .groups = "drop"
+  )
+
+# Plot
+havoc_stats %>%
+  ggplot(aes(x = reorder(DefenseTeam, HavocRate), y = HavocRate, fill = Group)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~Group, scales = "free_y") +
+  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Havoc Rate: Sacks & Interceptions",
+    subtitle = "Percentage of dropbacks resulting in a Sack or INT",
+    x = "Team",
+    y = "Havoc Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
