@@ -217,45 +217,60 @@ build_scores <- function(data) {
     )))
   
   # 1) Compute play-level scoring + PlayIndex
-  data_scored <- data %>%
+   data_scored <- data %>%
     arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%  # correct time order
     group_by(GameId) %>%
     mutate(
-      PlayIndex = row_number(),
-      
+      PlayIndex  = row_number(),
       desc_lower = tolower(Description),
       
-      # Identify punt-return touchdowns:
-      #    - PlayType == "PUNT" (adjust if your column is different)
-      #    - Touchdown on that play
+      # --- Identify different kinds of defensive TDs ---
+      # Punt return TD
       is_punt_td = (PlayType == "PUNT" | str_detect(desc_lower, " punt")) &
                    IsTouchdown == 1,
       
-      # Offensive TDs = all TDs that are NOT punt-return TDs
-      OffTDPoints = if_else(IsTouchdown == 1 & !is_punt_td, 6L, 0L),
+      # Interception return TD (pick-six)
+      is_int_td  = IsTouchdown == 1 & IsInterception == 1,
       
-      # Defensive TDs = punt-return TDs
-      DefTDPoints = if_else(is_punt_td, 6L, 0L),
+      # Blocked kick returned for TD (rough heuristic)
+      is_block_td = str_detect(desc_lower, "blocked") & IsTouchdown == 1,
       
-      # Base offensive scoring (non-TD parts still go to offense)
+      # Fumble return TD (rough heuristic)
+      is_fumble_ret_td = str_detect(desc_lower, "fumble") &
+                         str_detect(desc_lower, "return") &
+                         IsTouchdown == 1,
+      
+      # Defensive TD if any of the above
+      is_def_td = is_punt_td | is_int_td | is_block_td | is_fumble_ret_td,
+      
+      # Offensive TDs = all TDs that are NOT defensive TDs
+      OffTDPoints = if_else(IsTouchdown == 1 & !is_def_td, 6L, 0L),
+      
+      # Defensive TDs = all defensive TDs
+      DefTDPoints = if_else(is_def_td, 6L, 0L),
+      
+      # --- Offensive scoring on the play ---
       OffPointsPlay =
         OffTDPoints +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
       
-      # Base defensive scoring (safeties, defensive 2-pt returns, punt TDs)
+      # --- Defensive scoring on the play ---
       DefPointsPlay =
         if_else(IsSafety == 1, 2L, 0L) +
         if_else(DefensiveTwoPoint == 1, 2L, 0L) +
         DefTDPoints,
       
+      # Wipe scoring on no-play rows (except safeties)
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-
       DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
     ) %>%
     ungroup() %>%
-    select(-desc_lower, -is_punt_td, -OffTDPoints, -DefTDPoints)
+    select(
+      -desc_lower, -is_punt_td, -is_int_td, -is_block_td, -is_fumble_ret_td,
+      -is_def_td, -OffTDPoints, -DefTDPoints
+    )
   
   # 2) Long-format team scoring table
   team_scores_long <- data_scored %>%
@@ -329,7 +344,7 @@ pbp %>%
     str_detect(tolower(Description), "reversed")
   )
 
-#we might be ****ed: (5:00) (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE TO NO 1 FOR 2 YARDS (29-P.ADEBO). FUMBLES (29-P.ADEBO), RECOVERED BY CAR-15-J.MINGO AT NO 1. THE REPLAY OFFICIAL REVIEWED THE SHORT OF THE GOAL LINE RULING, AND THE PLAY WAS REVERSED. (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE FOR 3 YARDS, TOUCHDOWN.	
+#we might be in trouble: (5:00) (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE TO NO 1 FOR 2 YARDS (29-P.ADEBO). FUMBLES (29-P.ADEBO), RECOVERED BY CAR-15-J.MINGO AT NO 1. THE REPLAY OFFICIAL REVIEWED THE SHORT OF THE GOAL LINE RULING, AND THE PLAY WAS REVERSED. (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE FOR 3 YARDS, TOUCHDOWN.	
 
 #that text displays how even when "reversed" occurs, it doesn't necessarily mean the touchdown was reversed... I have no clue what to do.
 
@@ -1225,6 +1240,28 @@ defense_ypp %>%
   theme_minimal() +
   theme(legend.position = "none")
 
+
+
+defense_ypp_all <- pbp %>%
+  group_by(DefenseTeam) %>%
+  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Join: ALL teams' defensive YPP with point differential
+defense_scatter_data <- team_differential %>%
+  inner_join(defense_ypp_all, by = c("Team" = "DefenseTeam"))
+
+# Scatter Plot: Yards Allowed vs Point Differential
+ggplot(defense_scatter_data, aes(x = PointDiff, y = YardsAllowed)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Defensive Yards Allowed vs. Point Differential",
+    subtitle = "Lower Yards Allowed = Better Defense",
+    x = "Point Differential",
+    y = "Avg Yards Allowed Per Play"
+  ) +
+  theme_minimal()
 
 ```
 

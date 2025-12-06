@@ -2,6 +2,34 @@ Analysis on NFL Play-By-Play Data
 ================
 Nathan Krieger, Caleb Moe
 
+\##Introduction
+
+The modern NFL is defined by information; every snap generates data that
+can explain why teams win or lose. While traditional box scores tell us
+what happened, play-by-play (PBP) analysis reveals how and why it
+happened. This project leverages granular PBP data from the 2024 season
+to deconstruct the decision-making processes that separate elite
+contenders from struggling franchises.
+
+Our analysis explores what makes an NFL team good and what makes them
+bad.
+
+Point Differential: A comparative analysis of the Top 5 and Bottom 5
+teams by point differential.
+
+Offensive Effectiveness: Measuring offensive performance through Yards
+Per Play (YPP), conversion rates, and more.
+
+Defensive Effectiveness: Measuring defensive performance through Yards
+Allowed, starting field positions, and more.
+
+By isolating these variables, we aim to identify the patterns that
+define success in the 2024 NFL season.
+
+\##Data
+
+### Retrieving dataset
+
 ``` r
 pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
 ```
@@ -20,52 +48,34 @@ pbp <- readr::read_csv("https://nflsavant.com/pbp_data.php?year=2024")
     ## • `` -> `...17`
     ## • `` -> `...18`
 
-**Introduction**
+Our analysis uses play-by-play data from the 2024 NFL season sourced
+from NFLsavant.com, a publicly accessible resource containing detailed
+information for every offensive snap. The dataset includes 45 variables.
+The relavent variables are:
 
-The NFL has become increasingly data-driven, and play-by-play (PBP)
-information provides one of the richest views into how teams behave on
-the field. In recent years, analysts have used PBP data to uncover
-trends such as fourth-down aggression, pass-rate over expectation, route
-combinations, motion usage, and situational efficiency.
+GameId: The ID of the current game.
 
-Our project explores play-by-play trends across the NFL, focusing on how
-offensive decision-making and performance vary by:
+Quarter: The current quarter.
 
-Down & distance
+Minute: The current minute in the quarter.
 
-Field position
+Second: The current second of the minute.
 
-Play type (run/pass)
+YardLine: What yardline the team is on.
 
-Quarter & game situation
+Offense Team: The team on offense.
 
-Score differential
+Defense Team: The team on defense.
 
-Team tendencies
+Description: Explains what happened on the play and the play’s outcomes.
 
-The goal is to identify meaningful behavioral patterns and performance
-outcomes that can help explain how modern offenses operate.
+PlayType: The play type. Can be pass or run.
 
-We also evaluate the robustness of our findings with multiple approaches
-and highlight unintuitive results requiring further investigation.
+IsInterception: Shows if the play resulted in an interception.
 
-**Data**
+Formation: Shows the offensive formation for the current play.
 
-Our analysis uses play-by-play data from NFLsavant.com, a publicly
-accessible resource containing detailed information for every offensive
-snap. The dataset includes 45 variables such as:
-
-GameId
-
-Quarter
-
-Minute
-
-YardLine
-
-Formation
-
-And many more…
+\##Cleaning The Data
 
 ``` r
 # data exploration
@@ -351,45 +361,60 @@ build_scores <- function(data) {
     )))
   
   # 1) Compute play-level scoring + PlayIndex
-  data_scored <- data %>%
+   data_scored <- data %>%
     arrange(GameId, Quarter, desc(Minute), desc(Second)) %>%  # correct time order
     group_by(GameId) %>%
     mutate(
-      PlayIndex = row_number(),
-      
+      PlayIndex  = row_number(),
       desc_lower = tolower(Description),
       
-      # Identify punt-return touchdowns:
-      #    - PlayType == "PUNT" (adjust if your column is different)
-      #    - Touchdown on that play
+      # --- Identify different kinds of defensive TDs ---
+      # Punt return TD
       is_punt_td = (PlayType == "PUNT" | str_detect(desc_lower, " punt")) &
                    IsTouchdown == 1,
       
-      # Offensive TDs = all TDs that are NOT punt-return TDs
-      OffTDPoints = if_else(IsTouchdown == 1 & !is_punt_td, 6L, 0L),
+      # Interception return TD (pick-six)
+      is_int_td  = IsTouchdown == 1 & IsInterception == 1,
       
-      # Defensive TDs = punt-return TDs
-      DefTDPoints = if_else(is_punt_td, 6L, 0L),
+      # Blocked kick returned for TD (rough heuristic)
+      is_block_td = str_detect(desc_lower, "blocked") & IsTouchdown == 1,
       
-      # Base offensive scoring (non-TD parts still go to offense)
+      # Fumble return TD (rough heuristic)
+      is_fumble_ret_td = str_detect(desc_lower, "fumble") &
+                         str_detect(desc_lower, "return") &
+                         IsTouchdown == 1,
+      
+      # Defensive TD if any of the above
+      is_def_td = is_punt_td | is_int_td | is_block_td | is_fumble_ret_td,
+      
+      # Offensive TDs = all TDs that are NOT defensive TDs
+      OffTDPoints = if_else(IsTouchdown == 1 & !is_def_td, 6L, 0L),
+      
+      # Defensive TDs = all defensive TDs
+      DefTDPoints = if_else(is_def_td, 6L, 0L),
+      
+      # --- Offensive scoring on the play ---
       OffPointsPlay =
         OffTDPoints +
         if_else(FieldGoalResult == "GOOD", 3L, 0L) +
         if_else(ExtraPointResult == "GOOD", 1L, 0L) +
         if_else(IsTwoPointConversionSuccessful == 1 & DefensiveTwoPoint == 0, 2L, 0L),
       
-      # Base defensive scoring (safeties, defensive 2-pt returns, punt TDs)
+      # --- Defensive scoring on the play ---
       DefPointsPlay =
         if_else(IsSafety == 1, 2L, 0L) +
         if_else(DefensiveTwoPoint == 1, 2L, 0L) +
         DefTDPoints,
       
+      # Wipe scoring on no-play rows (except safeties)
       OffPointsPlay = if_else(IsNoPlay == 1, 0L, OffPointsPlay),
-
       DefPointsPlay = if_else(IsNoPlay == 1 & IsSafety != 1, 0L, DefPointsPlay)
     ) %>%
     ungroup() %>%
-    select(-desc_lower, -is_punt_td, -OffTDPoints, -DefTDPoints)
+    select(
+      -desc_lower, -is_punt_td, -is_int_td, -is_block_td, -is_fumble_ret_td,
+      -is_def_td, -OffTDPoints, -DefTDPoints
+    )
   
   # 2) Long-format team scoring table
   team_scores_long <- data_scored %>%
@@ -509,7 +534,7 @@ pbp %>%
     ## #   IsChallengeReversed <dbl>, Challenger <lgl>, IsMeasurement <dbl>, …
 
 ``` r
-#we might be ****ed: (5:00) (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE TO NO 1 FOR 2 YARDS (29-P.ADEBO). FUMBLES (29-P.ADEBO), RECOVERED BY CAR-15-J.MINGO AT NO 1. THE REPLAY OFFICIAL REVIEWED THE SHORT OF THE GOAL LINE RULING, AND THE PLAY WAS REVERSED. (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE FOR 3 YARDS, TOUCHDOWN. 
+#we might be in trouble: (5:00) (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE TO NO 1 FOR 2 YARDS (29-P.ADEBO). FUMBLES (29-P.ADEBO), RECOVERED BY CAR-15-J.MINGO AT NO 1. THE REPLAY OFFICIAL REVIEWED THE SHORT OF THE GOAL LINE RULING, AND THE PLAY WAS REVERSED. (SHOTGUN) 9-B.YOUNG SCRAMBLES UP THE MIDDLE FOR 3 YARDS, TOUCHDOWN. 
 
 #that text displays how even when "reversed" occurs, it doesn't necessarily mean the touchdown was reversed... I have no clue what to do.
 
@@ -632,12 +657,12 @@ final_scores
     ##  2 2024090600 GB        29 PHI       34
     ##  3 2024090800 ATL       10 PIT       18
     ##  4 2024090801 BUF       34 ARI       28
-    ##  5 2024090802 CHI       18 TEN       23
+    ##  5 2024090802 CHI       24 TEN       17
     ##  6 2024090803 NE        16 CIN       10
     ##  7 2024090804 HOU       29 IND       27
     ##  8 2024090805 MIA       20 JAX       17
     ##  9 2024090806 CAR       10 NO        47
-    ## 10 2024090807 MIN       21 NYG       13
+    ## 10 2024090807 MIN       27 NYG        7
     ## # ℹ 274 more rows
 
 ``` r
@@ -1525,6 +1550,33 @@ defense_ypp %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+
+``` r
+defense_ypp_all <- pbp %>%
+  group_by(DefenseTeam) %>%
+  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop")
+
+# Join: ALL teams' defensive YPP with point differential
+defense_scatter_data <- team_differential %>%
+  inner_join(defense_ypp_all, by = c("Team" = "DefenseTeam"))
+
+# Scatter Plot: Yards Allowed vs Point Differential
+ggplot(defense_scatter_data, aes(x = PointDiff, y = YardsAllowed)) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Defensive Yards Allowed vs. Point Differential",
+    subtitle = "Lower Yards Allowed = Better Defense",
+    x = "Point Differential",
+    y = "Avg Yards Allowed Per Play"
+  ) +
+  theme_minimal()
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-34-2.png)<!-- -->
 
 ``` r
 # Calculate Havoc Rate (Sacks + INTs per Dropback)
