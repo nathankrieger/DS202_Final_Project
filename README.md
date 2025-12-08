@@ -177,6 +177,14 @@ levels(pbp$Formation)
     ## [1] "FIELD GOAL"        "NO HUDDLE"         "NO HUDDLE SHOTGUN"
     ## [4] "PUNT"              "SHOTGUN"           "UNDER CENTER"
 
+### Columns added
+
+- FieldGoalResult - describes the outcome of field goal attempts
+- IsSafety - describes whether or not a safety occurred
+- ExtraPointResult - describes the outcome of an extra point attempt
+- DefensiveTwoPoint - describes whether the defense got a 2 point return
+  on an extra point or two point attempt
+
 ``` r
 #inspecting field goals to prepare to add "score" variables to the dataset
 pbp %>%
@@ -353,6 +361,44 @@ pbp <- pbp %>%
 #Okay now we should have data on all scoring plays
 ```
 
+## Scoring Function
+
+To analyze team performance, we needed a way to track the score
+throughout every game directly from the play-by-play data. Unfortunately
+the dataset did not already contain the scores. We initially thought
+about choosing different data but then we figured it was in the spirit
+of the class to go through a lot of effort to properly calculate scoring
+using only the data we had.
+
+The scoring function builds this information by examining each play and
+determining how many points were awarded and to which team. It
+identifies all common scoring events—touchdowns, field goals, extra
+points, safeties, defensive returns, and two-point plays—and assigns the
+correct point values. All this info is either taken from added columns
+or parsed from the string variable “description”.
+
+After assigning points to each individual play, the function then keeps
+a running total for both the offense and defense as the game progresses.
+This produces accurate offensive score, defensive score, and score
+differential values for every play in every game.
+
+In short, the scoring function transforms raw play descriptions into a
+full scoring timeline, allowing us to compare teams based on actual
+points gained or allowed over the season.
+
+### Scoring Columns Added
+
+- PlayIndex - The order of plays in a game
+- OffPointsPlay - How many points the offense generated on that specific
+  play
+- DefPointsPlay - How many points the defense generated on that specific
+  play
+- OffenseScore - How many points the team currently on offense has
+  generated up until and including that play
+- DefenseScore - How many points the team currently on defense has
+  generated up until and including that play
+- ScoreDiff - OffenseScore - DefenseScore
+
 ``` r
 #now that we have gathered all data on scoring we can try to impliment some sort of scoring function.
 build_scores <- function(data) {
@@ -478,6 +524,30 @@ build_scores <- function(data) {
 }
 pbp <- build_scores(pbp)
 ```
+
+## Testing and fixing the scoring function
+
+We decided to check the scores of certain NFL games and compare them to
+actual scores which happened. While doing this we discovered many errors
+such as the built in isTouchdown variable from the data set being set to
+1 even on touchdowns which were called back. This led to us correcting
+isTouchdown via parsing the “description” variable and identifying false
+touchdowns.
+
+Another issue we identified is that we were adding points to teams even
+on plays that were considered “noPlays” which just means that either
+there was a penalty or something went wrong so the outcome of the play
+did not matter. Also, we discovered that we were adding points to the
+offense when the defense got an interception and scored thus throwing of
+the score significantly when “pick 6’s” occurred.
+
+One final issue that we identified is that sometimes, the offensive team
+was incorrectly identified by the dataset and so sometimes certain plays
+like extra points would give the points to the wrong team, this is an
+error with the dataset but we got to a point with the scores where they
+were consistently within one or two scores of the actual score so we
+decided it was best to focus on analyzing the data at this point rather
+than trying to spend so much effort manually correcting the dataset.
 
 ``` r
 #investigating to make sure that was right
@@ -725,7 +795,6 @@ pbp %>%
 #I have discovered that the wrong team is marked as offense in this game, one extra point which should be washington's is given to detroit lions because the actual data says that detroit was the offense team not washington, unfortunately this kind of error is  unavoidable unless we manually corect the data therefore, I think my time focusing on scoring is over, the scores are generally accurate or at most one scoring action off and thus can still be used mostly accurately for insights.
 
 
-#
 pbp %>% 
   filter( GameId == 2024090809) %>%
   select(OffenseTeam, OffenseScore, DefenseTeam, DefenseScore, Description, IsNoPlay, IsInterception)
@@ -797,9 +866,10 @@ pbp %>%
     ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
     ## generated.
 
-![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- --> - This chart
-shows the pass rate by the yard line. The results are fairly consistent
-when looking at all plays at all times of the game.
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+- This chart shows the pass rate by the yard line. The results are
+  fairly consistent when looking at all plays at all times of the game.
 
 ``` r
 # Yards Gained by Down
@@ -1017,8 +1087,10 @@ pbp %>%
   theme_minimal()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- --> - This chart
-demonstrates teams experiencing more desparation on 3rd and 4th down.
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+- This chart demonstrates teams experiencing more desparation on 3rd and
+  4th down.
 
 ``` r
 # Likelihood of interceptions based on field position 
@@ -1080,8 +1152,9 @@ pbp %>%
   labs(title="Success Rate by Down", x="Down", y="Success Rate")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- --> - This chart
-illustrates that teams are most successful on 1st down.
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+
+- This chart illustrates that teams are most successful on 1st down.
 
 ``` r
 #Pass rate by Downs and Distance (excluding plays with more than 20 yards till first down/touchdown)
@@ -1171,6 +1244,12 @@ all_team_differential %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+This chart shows how the maximum point differential is a little over 200
+by DET and the least is a little above -200 by CAR. It is interesting to
+see that there are no teams that are significant outliers although it
+should be pointed out the top 4 teams do have a large gap between
+themselves and the other teams.
 
 ``` r
 # --- 1. Calculate Point Differential ---
@@ -1612,6 +1691,9 @@ print(paste("Correlation (r):", round(r_val_expl, 4)))
     ## [1] "Correlation (r): 0.5223"
 
 - Scatterplot version of the barchart, accounting for the entire league.
+  Pretty strong Correlation at 0.5223. This shows good teams are capable
+  of big plays. The most explosive team is Baltimore who has dominated
+  mos tof the offensive stats.
 
 ## Defensive Statistics
 
@@ -1641,6 +1723,14 @@ field_stats %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+- Average starting field position is a stat which highlights
+  defense/special teams. If a team starts farther up the field then that
+  means either the defense got a stop or the special teams carried the
+  ball up farther than other teams. We can see there is not a huge
+  difference between the best teams and the worst teams but Buffalo and
+  Philadelphia start on average 5 yards farther than the worst teams
+  which certainly can add up over time.
 
 ``` r
 # --- Create Defensive Dataset using EXISTING top/bottom lists ---
@@ -1725,6 +1815,9 @@ print(paste("Correlation (r):", round(r_val_def_ypp, 4)))
 
     ## [1] "Correlation (r): -0.2489"
 
+- Generally better teams have defenses which allow less yards per play
+  on average. Detriot seems like a large outlier to this trend however.
+
 ``` r
 # Calculate Havoc Rate (Sacks + INTs per Dropback)
 havoc_stats <- combined_defense %>%
@@ -1800,6 +1893,10 @@ print(paste("Correlation (r):", round(r_val_havoc, 4)))
 
     ## [1] "Correlation (r): 0.2952"
 
+- In general, the havoc rate does have a decent Correlation on winning
+  with a 0.2952 r value however, this number is still far lower than
+  things like explosiveness and average yards per play.
+
 ``` r
 def_points_all <- pbp %>%
   group_by(GameId, DefenseTeam) %>%
@@ -1845,3 +1942,38 @@ print(paste("Correlation (r):", round(r_val_def_pts, 4)))
 ```
 
     ## [1] "Correlation (r): 0.1917"
+
+- Even when the defense directly contribute to scoring, the correlation
+  with point differential is still low. This seems very unexpected
+  because these defensive plays directly lead to point differential but
+  maybe it’s just because good teams don’t typically rely on their
+  defense for point generation, just for stopping the other team.
+
+## Conclusions
+
+Our analysis shows that a few key factors separate good NFL teams from
+bad ones:
+
+1.  **Offensive efficiency is the strongest predictor of success.**  
+    Teams that gain more yards per play and generate explosive plays
+    tend to have much higher point differentials.
+
+2.  **Good teams convert on 3rd down.**  
+    Sustaining drives is one of the clearest indicators of overall team
+    quality.
+
+3.  **Bad teams pass more because they are behind.**  
+    Higher pass rates usually reflect game situation, not strategy.
+
+4.  **Defense matters, but less than offense.**  
+    Defensive metrics like yards allowed and havoc rate correlate with
+    winning, but not as strongly as offensive efficiency.
+
+5.  **Situational stats (4th quarter, 2-minute drill) are
+    inconsistent.**  
+    Good teams often play conservatively late in games, while bad teams
+    play aggressively, making these numbers noisy.
+
+**Overall:** Teams that consistently move the ball, convert downs, and
+create big plays win the most games. Offense remains the clearest driver
+of success in the 2024 season.
