@@ -982,6 +982,7 @@ pbp %>%
   ) %>%
   ggplot(aes(x = togo_bin, y = rate, fill = play_type)) +
   geom_col(position = "dodge") +
+  scale_fill_manual(values = c("Pass" = "steelblue", "Run" = "red")) +
   labs(
     title = "3rd Down Play Call by Yards to Go",
     x = "Yards to Go (Binned)",
@@ -1232,7 +1233,7 @@ all_team_differential %>%
   ggplot(aes(x = reorder(Team, PointDiff), y = PointDiff, fill = PointDiff > 0)) +
   geom_col() +
   coord_flip() +
-  scale_fill_manual(values = c("FALSE" = "#D55E00", "TRUE" = "#0072B2"), 
+  scale_fill_manual(values = c("FALSE" = "red", "TRUE" = "steelblue"), 
                     labels = c("Negative", "Positive"), 
                     name = "Differential") +
   labs(
@@ -1301,8 +1302,9 @@ efficiency_stats %>%
   ggplot(aes(x = reorder(OffenseTeam, YPP), y = YPP, fill = Group)) +
   geom_col() +
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +  # This creates the side-by-side view
-  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  # Explicitly map colors to groups
+  scale_fill_manual(values = c("Bottom 5 (Worst Diff)" = "red", "Top 5 (Best Diff)" = "steelblue")) +
   labs(
     title = "Offensive Efficiency: Top 5 vs Bottom 5",
     subtitle = "Average Yards Per Play",
@@ -1310,7 +1312,8 @@ efficiency_stats %>%
     y = "Yards Per Play"
   ) +
   theme_minimal() +
-  theme(legend.position = "none")
+  # Changed legend position to help distinguish the groups by color
+  theme(legend.position = "right")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- --> - This chart
@@ -1387,29 +1390,50 @@ play_tendencies <- combined_offense %>%
   ) %>%
   pivot_longer(cols = c(PassRate, RushRate), names_to = "Type", values_to = "Rate")
 
-# Plot
+# Combined Plot: Top vs Bottom + Pass vs Rush
 play_tendencies %>%
-  ggplot(aes(x = OffenseTeam, y = Rate, fill = Type)) +
-  geom_col(position = "fill") +
+  # 1. Prepare the data for explicit ordering
+  mutate(
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  ) %>%
+  
+  ggplot(aes(
+    # Use interaction to order: first by Group, then by PassRate within the group
+    x = reorder(OffenseTeam, as.numeric(Group) + (Type == "PassRate") * Rate),
+    y = Rate, 
+    fill = Type,
+    alpha = Group 
+  )) +
+  geom_col(position = "fill", color = "black") +
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
   scale_y_continuous(labels = scales::percent) +
+
+  # Pass/Run colors
+  scale_fill_manual(values = c("PassRate" = "steelblue", 
+                               "RushRate" = "red")) +
+
+  # Top vs Bottom shading
+  scale_alpha_manual(values = c("Top 5 (Best Diff)" = 1, "Bottom 5 (Worst Diff)" = 0.5),
+                     guide = "none") + # *** KEY CHANGE: HIDE ALPHA LEGEND ***
+
   labs(
-    title = "Play-Calling Tendencies",
-    subtitle = "Pass (Blue) vs Run (Red) Ratios",
+    title = "Play-Calling Tendencies Across Top & Bottom 5 Teams",
+    # Subtitle now acts as the legend for shading
+    subtitle = "Top 5 (solid, top) vs Bottom 5 (faded, bottom) — Pass (Blue) vs Run (Red)",
     x = "Team",
     y = "Percentage",
     fill = "Play Type"
+    # Removed: alpha = "Team Group"
   ) +
   theme_minimal()
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
-- This barchart is a strong indicator of the disfunctions of a bad team.
-  Bad teams do not run the ball nearly as much as good teams. Without an
-  effective run game, the defense only needs to defend passing plays,
-  making them even more effective against bad teams.
+- This bar chart is a strong indicator of the dysfunctions of a bad
+  team. Bad teams do not run the ball nearly as much as good teams.
+  Without an effective run game, the defense only needs to defend
+  passing plays, making them even more effective against bad teams.
 
 ``` r
 # 1. Calculate Pass Rate for ALL teams
@@ -1436,7 +1460,7 @@ print(paste("Correlation (r):", round(r_val_pass, 4)))
 pass_scatter_data %>%
   ggplot(aes(x = PointDiff, y = PassRate)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "darkgreen", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   scale_y_continuous(labels = scales::percent) +
   labs(
@@ -1452,7 +1476,8 @@ pass_scatter_data %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
-- Scatterplot version of the barchart, accounting for the entire league.
+- Scatter plot version of the bar chart, accounting for the entire
+  league.
 
 - Down Efficiency Chart
 
@@ -1461,24 +1486,44 @@ pass_scatter_data %>%
 down_stats <- combined_offense %>%
   filter(Down == 3) %>%
   group_by(Group, OffenseTeam) %>%
-  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop")
+  summarize(SuccessRate = mean(Yards > 0, na.rm = TRUE), .groups = "drop") %>%
+  # 1. Prepare the data for explicit ordering and coloring
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Bottom 5" (1st level) will appear at the bottom of the flipped chart.
+    # "Top 5" (2nd level) will appear at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  )
 
 # Plot
 down_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, SuccessRate), y = SuccessRate, fill = Group)) +
+  ggplot(aes(
+    # 2. Order by Group, then by SuccessRate within the group
+    x = reorder(OffenseTeam, as.numeric(Group) * 1000 + SuccessRate), 
+    y = SuccessRate, 
+    fill = Group # Use Group for the fill color
+  )) +
   geom_col() +
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  # REMOVED: facet_wrap(~Group, scales = "free_y")
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
   scale_y_continuous(labels = scales::percent) +
   labs(
-    title = "3rd Down Success Rate",
-    subtitle = "Percentage of plays gaining yards on 3rd down",
+    title = "3rd Down Success Rate: Top 5 vs Bottom 5",
+    subtitle = "Percentage of 3rd downs gaining positive yards",
     x = "Team",
-    y = "Success Rate"
+    y = "Success Rate",
+    fill = "Team Group" # Add the fill legend back to explain the colors
   ) +
   theme_minimal() +
-  theme(legend.position = "none")
+  # Keep legend if it helps explain the color, otherwise remove it
+  theme(legend.position = "bottom")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
@@ -1507,7 +1552,7 @@ efficiency_scatter_data <- team_differential %>%
 efficiency_scatter_data %>%
   ggplot(aes(x = PointDiff, y = ConversionRate)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "purple", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   scale_y_continuous(labels = scales::percent) +
   labs(
@@ -1535,51 +1580,45 @@ print(paste("Correlation (r):", round(r_val_3rd, 4)))
 - 4th Quarter Efficiency (Game End Pressure)
 
 ``` r
-# --- Metric 2: 4th Quarter YPP ---
-
-# 1. Calculate for ALL Teams
-q4_stats_all <- pbp %>%
-  filter(Quarter == 4) %>%
-  group_by(OffenseTeam) %>%
-  summarize(Q4_YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
-
-# Join
-q4_scatter_data <- team_differential %>% inner_join(q4_stats_all, by = c("Team" = "OffenseTeam"))
-
-r_val_q4 <- cor(q4_scatter_data$PointDiff, q4_scatter_data$Q4_YPP, use = "complete.obs")
-print(paste("Correlation (r):", round(r_val_q4, 4)))
-```
-
-    ## [1] "Correlation (r): 0.1695"
-
-``` r
-# Scatter Plot
-ggplot(q4_scatter_data, aes(x = PointDiff, y = Q4_YPP)) +
-  geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "purple", size = 3) +
-  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
-  labs(title = "4th Quarter YPP vs. Point Differential", subtitle = "Offensive performance in the final quarter",
-       x = "Point Differential", y = "4th Quarter Yards/Play") + theme_minimal()
-```
-
-    ## `geom_smooth()` using formula = 'y ~ x'
-
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
-
-``` r
-# 2. Bar Chart
+# Combined Bar Chart: 4th Quarter YPP
 combined_offense %>%
   filter(Quarter == 4) %>%
   group_by(Group, OffenseTeam) %>%
   summarize(Q4_YPP = mean(Yards, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = reorder(OffenseTeam, Q4_YPP), y = Q4_YPP, fill = Group)) +
-  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("steelblue", "firebrick")) +
-  labs(title = "4th Quarter Efficiency (Top 5 vs Bottom 5)", subtitle = "Yards Per Play in Q4",
-       x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  ) %>%
+  ggplot(aes(
+    # 2. Order by Group first, then by Q4_YPP within the group
+    x = reorder(OffenseTeam, as.numeric(Group) * 1000 + Q4_YPP), 
+    y = Q4_YPP, 
+    fill = Group # Use Group for the fill color
+  )) +
+  geom_col() + 
+  coord_flip() + 
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
+  labs(
+    title = "4th Quarter Efficiency (Top 5 vs Bottom 5)", 
+    subtitle = "Yards Per Play in Q4 — Top 5 (Steelblue) vs Bottom 5 (Red)",
+    x = "Team", 
+    y = "Yards Per Play"
+  ) + 
+  theme_minimal() + 
+  # 4. Keep legend removed
+  theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-28-2.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 - Based on this chart, there is not a strong conclusion to be made. The
   reason for this is because teams that are highly effective in the
@@ -1591,44 +1630,45 @@ combined_offense %>%
 - “2-Minute Drill” Efficiency (Clock Pressure)
 
 ``` r
-# --- Metric 3: 2-Minute Drill Efficiency ---
-
-# 1. Calculate for ALL Teams
-two_min_stats_all <- pbp %>%
-  filter((Quarter == 2), Minute <= 2) %>%
-  group_by(OffenseTeam) %>%
-  summarize(TwoMin_YPP = mean(Yards, na.rm = TRUE), .groups = "drop")
-
-# Join
-two_min_scatter_data <- team_differential %>% inner_join(two_min_stats_all, by = c("Team" = "OffenseTeam"))
-
-# Scatter Plot
-ggplot(two_min_scatter_data, aes(x = PointDiff, y = TwoMin_YPP)) +
-  geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "orange", size = 3) +
-  geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
-  labs(title = "2-Minute Drill YPP vs. Point Differential", subtitle = "Performance in last 2 mins of first half",
-       x = "Point Differential", y = "2-Min Drill Yards/Play") + theme_minimal()
-```
-
-    ## `geom_smooth()` using formula = 'y ~ x'
-
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
-
-``` r
-# 2. Bar Chart
+# Combined Bar Chart: 2-Minute Drill Efficiency
 combined_offense %>%
   filter((Quarter == 2), Minute <= 2) %>%
   group_by(Group, OffenseTeam) %>%
   summarize(TwoMin_YPP = mean(Yards, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = reorder(OffenseTeam, TwoMin_YPP), y = TwoMin_YPP, fill = Group)) +
-  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("steelblue", "firebrick")) +
-  labs(title = "2-Minute Drill Efficiency (Top 5 vs Bottom 5)", subtitle = "Yards Per Play (Last 2 mins of Q2/Q4)",
-       x = "Team", y = "Yards Per Play") + theme_minimal() + theme(legend.position = "none")
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  ) %>%
+  ggplot(aes(
+    # 2. Order by Group first, then by TwoMin_YPP within the group
+    x = reorder(OffenseTeam, as.numeric(Group) * 1000 + TwoMin_YPP), 
+    y = TwoMin_YPP, 
+    fill = Group # Use Group for the fill color
+  )) +
+  geom_col() + 
+  coord_flip() + 
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
+  labs(
+    title = "2-Minute Drill Efficiency (Top 5 vs Bottom 5)", 
+    subtitle = "Yards Per Play (Last 2 mins of Q2) — Top 5 (Blue) vs Bottom 5 (Red)",
+    x = "Team", 
+    y = "Yards Per Play"
+  ) + 
+  theme_minimal() + 
+  # 4. Keep legend removed for a clean look
+  theme(legend.position = "none")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-29-2.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 - These charts show a very similar look that the 4th quarter efficiency
   chart did, this time we’re just looking within the last 2 minutes of
@@ -1637,26 +1677,42 @@ combined_offense %>%
 - Explosive Play Rate (Big Play Ability)
 
 ``` r
-# --- Metric 4: Explosive Play Rate ---
-
-# 1. Calculate for ALL Teams
-explosive_stats_all <- pbp %>%
-  group_by(OffenseTeam) %>%
-  summarize(ExplosiveRate = mean(Yards >= 20, na.rm = TRUE), .groups = "drop")
-
-# Join
-explosive_scatter_data <- team_differential %>% inner_join(explosive_stats_all, by = c("Team" = "OffenseTeam"))
-
-# 2. Bar Chart
+# Combined Bar Chart: Explosive Play Rate
 combined_offense %>%
   group_by(Group, OffenseTeam) %>%
   summarize(ExplosiveRate = mean(Yards >= 20, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = reorder(OffenseTeam, ExplosiveRate), y = ExplosiveRate, fill = Group)) +
-  geom_col() + coord_flip() + facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("steelblue", "firebrick")) +
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  ) %>%
+  ggplot(aes(
+    # 2. Order by Group first, then by ExplosiveRate within the group
+    x = reorder(OffenseTeam, as.numeric(Group) * 1000 + ExplosiveRate), 
+    y = ExplosiveRate, 
+    fill = Group # Use Group for the fill color
+  )) +
+  geom_col() + 
+  coord_flip() + 
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
   scale_y_continuous(labels = scales::percent) +
-  labs(title = "Explosive Play Rate (Top 5 vs Bottom 5)", subtitle = "% of plays gaining 20+ Yards",
-       x = "Team", y = "Explosive Rate") + theme_minimal() + theme(legend.position = "none")
+  labs(
+    title = "Explosive Play Rate (Top 5 vs Bottom 5)", 
+    subtitle = "% of plays gaining 20+ Yards — Top 5 (Blue) vs Bottom 5 (Red)",
+    x = "Team", 
+    y = "Explosive Rate"
+  ) + 
+  theme_minimal() + 
+  # 4. Keep legend removed for a clean look
+  theme(legend.position = "none")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
@@ -1666,10 +1722,19 @@ combined_offense %>%
   clear that better teams are much more explosive.
 
 ``` r
+# 1. Calculate for ALL Teams (required for the scatter plot)
+explosive_stats_all <- pbp %>%
+  group_by(OffenseTeam) %>%
+  summarize(ExplosiveRate = mean(Yards >= 20, na.rm = TRUE), .groups = "drop")
+
+# Join (This requires 'team_differential' to be defined in a preceding chunk)
+explosive_scatter_data <- team_differential %>% 
+  inner_join(explosive_stats_all, by = c("Team" = "OffenseTeam"))
+
 # Scatter Plot
 ggplot(explosive_scatter_data, aes(x = PointDiff, y = ExplosiveRate)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "darkgreen", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   scale_y_continuous(labels = scales::percent) +
   labs(title = "Explosive Play Rate vs. Point Differential", subtitle = "% of plays gaining 20+ Yards",
@@ -1703,22 +1768,41 @@ print(paste("Correlation (r):", round(r_val_expl, 4)))
 # Calculate Field Position
 field_stats <- combined_offense %>%
   group_by(Group, OffenseTeam) %>%
-  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop")
+  summarize(AvgStart = mean(YardLine, na.rm = TRUE), .groups = "drop") %>%
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  )
 
 # Plot
 field_stats %>%
-  ggplot(aes(x = reorder(OffenseTeam, AvgStart), y = AvgStart, color = Group)) +
-  geom_point(size = 4) +
-  geom_segment(aes(x = OffenseTeam, xend = OffenseTeam, y = 0, yend = AvgStart)) +
+  ggplot(aes(
+    # 2. Order by Group first, then by AvgStart within the group
+    x = reorder(OffenseTeam, as.numeric(Group) * 1000 + AvgStart), 
+    y = AvgStart, 
+    fill = Group # Change to fill for bar chart
+  )) +
+  geom_col() + # Change to bar chart
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_color_manual(values = c("steelblue", "firebrick")) +
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
   labs(
-    title = "Average Starting Field Position",
+    title = "Average Starting Field Position: Top 5 vs Bottom 5",
+    # Subtitle updated to use "Blue"
+    subtitle = "Top 5 (Blue, top) vs Bottom 5 (Red, bottom)", 
     x = "Team",
     y = "Yard Line"
   ) +
   theme_minimal() +
+  # 4. Keep legend removed
   theme(legend.position = "none")
 ```
 
@@ -1757,22 +1841,41 @@ combined_defense <- bind_rows(top_5_defense, bottom_5_defense) %>%
 # Calculate Yards Allowed
 defense_ypp <- combined_defense %>%
   group_by(Group, DefenseTeam) %>%
-  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop")
+  summarize(YardsAllowed = mean(Yards, na.rm = TRUE), .groups = "drop") %>%
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
+  )
 
 # Plot
 defense_ypp %>%
-  ggplot(aes(x = reorder(DefenseTeam, -YardsAllowed), y = YardsAllowed, fill = Group)) +
+  ggplot(aes(
+    # 2. Order by Group first, then by -YardsAllowed (lower is better, so best at top)
+    x = reorder(DefenseTeam, as.numeric(Group) * 1000 - YardsAllowed), 
+    y = YardsAllowed, 
+    fill = Group
+  )) +
   geom_col() +
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
   labs(
-    title = "Defensive Efficiency: Yards Allowed Per Play",
-    subtitle = "Lower is Better (Do best teams also have best defenses?)",
+    title = "Defensive Efficiency: Yards Allowed Per Play (Top 5 vs Bottom 5)",
+    # Subtitle updated to use "Blue"
+    subtitle = "Lower is Better — Top 5 (Blue, top) vs Bottom 5 (Red, bottom)", 
     x = "Team",
     y = "Avg Yards Allowed"
   ) +
   theme_minimal() +
+  # 4. Keep legend removed
   theme(legend.position = "none")
 ```
 
@@ -1790,7 +1893,7 @@ defense_scatter_data <- team_differential %>%
 # Scatter Plot: Yards Allowed vs Point Differential
 ggplot(defense_scatter_data, aes(x = PointDiff, y = YardsAllowed)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "darkgreen", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   labs(
     title = "Defensive Yards Allowed vs. Point Differential",
@@ -1829,23 +1932,42 @@ havoc_stats <- combined_defense %>%
     HavocPlays = sum(IsSack == 1 | IsInterception == 1, na.rm = TRUE),
     HavocRate = HavocPlays / Dropbacks,
     .groups = "drop"
+  ) %>%
+  # 1. Prepare data for explicit ordering
+  mutate(
+    # Explicitly set factor levels for Group to control the vertical order:
+    # "Top 5" (last level) appears at the top of the flipped chart.
+    Group = factor(Group, levels = c("Bottom 5 (Worst Diff)", "Top 5 (Best Diff)"))
   )
 
 # Plot
 havoc_stats %>%
-  ggplot(aes(x = reorder(DefenseTeam, HavocRate), y = HavocRate, fill = Group)) +
+  ggplot(aes(
+    # 2. Order by Group first, then by HavocRate within the group (highest at top)
+    x = reorder(DefenseTeam, as.numeric(Group) * 1000 + HavocRate), 
+    y = HavocRate, 
+    fill = Group
+  )) +
   geom_col() +
   coord_flip() +
-  facet_wrap(~Group, scales = "free_y") +
-  scale_fill_manual(values = c("forestgreen", "firebrick")) +
+  # REMOVED: facet_wrap(~Group, scales = "free_y") to combine the charts
+  
+  # 3. Explicitly map colors to groups
+  scale_fill_manual(
+    values = c("Top 5 (Best Diff)" = "steelblue", 
+               "Bottom 5 (Worst Diff)" = "red")
+  ) +
+  
   scale_y_continuous(labels = scales::percent) +
   labs(
-    title = "Havoc Rate: Sacks & Interceptions",
-    subtitle = "Percentage of dropbacks resulting in a Sack or INT",
+    title = "Havoc Rate: Sacks & Interceptions (Top 5 vs Bottom 5)",
+    # 4. Use "Blue" in the subtitle
+    subtitle = "Percentage of dropbacks resulting in a Sack or INT — Top 5 (Blue, top) vs Bottom 5 (Red, bottom)",
     x = "Team",
     y = "Havoc Rate"
   ) +
   theme_minimal() +
+  # 5. Keep legend removed
   theme(legend.position = "none")
 ```
 
@@ -1867,7 +1989,7 @@ havoc_scatter_data <- team_differential %>%
 
 ggplot(havoc_scatter_data, aes(x = PointDiff, y = HavocRate)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "darkgreen", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   scale_y_continuous(labels = scales::percent) +
   labs(
@@ -1918,7 +2040,7 @@ def_points_scatter_data <- team_differential %>%
 # 3) Scatter plot: Defensive scoring rate vs Point Differential
 ggplot(def_points_scatter_data, aes(x = PointDiff, y = DefPointsPerGame)) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
-  geom_point(color = "darkgreen", size = 3) +
+  geom_point(color = "steelblue", size = 3) +
   geom_text(aes(label = Team), vjust = -1, size = 3, check_overlap = TRUE) +
   labs(
     title = "Defensive Points Generated vs Point Differential",
