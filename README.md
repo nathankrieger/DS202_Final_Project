@@ -816,6 +816,27 @@ pbp %>%
     ## # ℹ 195 more rows
     ## # ℹ 1 more variable: IsInterception <dbl>
 
+``` r
+# Helper: label Top N / Bottom N for bar-chart coloring
+add_top_bottom <- function(df, value_col, n = 5) {
+  value_col <- rlang::ensym(value_col)
+
+  df %>%
+    mutate(
+      .val = !!value_col,
+      # handle small charts (e.g., only 4 downs)
+      .n = min(n, dplyr::n()),
+      RankColor = case_when(
+        dplyr::dense_rank(dplyr::desc(.val)) <= .n ~ "Top 5",
+        dplyr::dense_rank(.val) <= .n ~ "Bottom 5",
+        TRUE ~ "Middle"
+      ),
+      RankColor = factor(RankColor, levels = c("Top 5", "Middle", "Bottom 5"))
+    ) %>%
+    select(-.val, -.-n)
+}
+```
+
 ## Basic Data Exporation
 
 ``` r
@@ -1609,7 +1630,7 @@ combined_offense %>%
   
   labs(
     title = "4th Quarter Efficiency (Top 5 vs Bottom 5)", 
-    subtitle = "Yards Per Play in Q4 — Top 5 (Steelblue) vs Bottom 5 (Red)",
+    subtitle = "Yards Per Play in Q4 — Top 5 (Blue) vs Bottom 5 (Red)",
     x = "Team", 
     y = "Yards Per Play"
   ) + 
